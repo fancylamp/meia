@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Meia OSCAR plugin",
+  "version": "1.0",
+  "description": "AI assistant for OSCAR EMR",
+  "permissions": ["activeTab", "storage"],
+  "content_scripts": [
+    {
+      "matches": ["*://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["*.woff2", "*.css", "logo.svg"],
+      "matches": ["*://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com/*"]
+    }
+  ]
+}
