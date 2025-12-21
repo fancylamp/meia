@@ -1,7 +1,7 @@
 """OSCAR Notes/Encounter Tools
 
-Uses tickler workaround for saving notes.
-Note: get_patient_notes is not available via OAuth API due to OSCAR session requirements.
+Note: Direct notes API requires HTTP session attributes not available via OAuth.
+This module uses a tickler-based workaround to save encounter notes.
 """
 
 import sys
@@ -12,12 +12,22 @@ from tools import oscar_request
 def save_note(patient_id: int, note_text: str, tool_context) -> dict:
     """Save an encounter note for a patient.
 
+    Creates a note in the patient's chart. Due to OSCAR API limitations with OAuth,
+    this uses a tickler-based workaround internally (creates temp tickler, saves note, completes tickler).
+    The note will be linked to a completed tickler in the database.
+
+    Always preface all notes with:
+
+    == Meia AI generated note ==
+
+    No need for markdown for these notes. They are displayed in plain-text.
+
     Args:
         patient_id: Patient demographic ID
-        note_text: The note content
+        note_text: The note content (plain text or formatted text)
 
     Returns:
-        dict with success status on success, or error/text on failure
+        dict with noteId of created note on success, or error details on failure
     """
     import uuid
     session_id = tool_context.state.get("session_id")

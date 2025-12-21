@@ -10,10 +10,16 @@ def get_patient_medications(patient_id: int, tool_context, status: str = "curren
 
     Args:
         patient_id: Patient demographic ID
-        status: Medication status - current, archived, longterm, all (default current)
+        status: Medication filter:
+            "current" - active medications (default)
+            "archived" - discontinued/past medications
+            "longterm" - long-term/chronic medications
+            "all" - all medications regardless of status
 
     Returns:
-        dict with list of medications on success, or error/text on failure
+        dict with array of medications, each containing:
+        drugId, brandName, genericName, dosage, frequency, route, quantity,
+        startDate, endDate, prescribingProvider, instructions, archived
     """
     resp = oscar_request("GET", f"/ws/services/rx/drugs/{status}/{patient_id}", tool_context.state.get("session_id"))
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
@@ -22,13 +28,14 @@ def get_patient_medications(patient_id: int, tool_context, status: str = "curren
 
 
 def get_prescriptions(patient_id: int, tool_context) -> dict:
-    """Get prescriptions for a patient.
+    """Get prescriptions (Rx records) for a patient.
 
     Args:
         patient_id: Patient demographic ID
 
     Returns:
-        dict with list of prescriptions on success, or error/text on failure
+        dict with array of prescriptions, each containing:
+        scriptNo, dateWritten, drugs (array), providerNo, providerName
     """
     resp = oscar_request("GET", "/ws/services/rx/prescriptions", tool_context.state.get("session_id"),
                          params={"demographicNo": patient_id})
@@ -38,14 +45,15 @@ def get_prescriptions(patient_id: int, tool_context) -> dict:
 
 
 def get_drug_history(drug_id: int, patient_id: int, tool_context) -> dict:
-    """Get history of a specific drug for a patient.
+    """Get prescription history for a specific drug for a patient.
 
     Args:
-        drug_id: Drug ID
+        drug_id: Drug ID from get_patient_medications
         patient_id: Patient demographic ID
 
     Returns:
-        dict with drug history on success, or error/text on failure
+        dict with array of historical prescriptions for this drug,
+        showing dosage changes, refills, and discontinuation dates
     """
     resp = oscar_request("GET", "/ws/services/rx/history", tool_context.state.get("session_id"),
                          params={"id": drug_id, "demographicNo": patient_id})

@@ -9,11 +9,13 @@ def get_daily_appointments(date: str, tool_context, provider_no: Optional[str] =
     """Get appointments for a specific day.
 
     Args:
-        date: Date in YYYY-MM-DD format or "today"
-        provider_no: Provider ID or "me" for current user (optional, defaults to all providers)
+        date: Date in YYYY-MM-DD format, or "today" for current date
+        provider_no: Provider ID to filter by, or "me" for current user (optional - omit for all providers)
 
     Returns:
-        dict with list of appointments on success, or error/text on failure
+        dict with array of appointments, each containing:
+        id, demographicNo, providerNo, appointmentDate, startTime, endTime, duration,
+        status, type, reason, notes, demographicName, providerName
     """
     endpoint = f"/ws/services/schedule/{provider_no}/day/{date}" if provider_no else f"/ws/services/schedule/day/{date}"
     resp = oscar_request("GET", endpoint, tool_context.state.get("session_id"))
@@ -23,10 +25,12 @@ def get_daily_appointments(date: str, tool_context, provider_no: Optional[str] =
 
 
 def get_appointment_statuses(tool_context) -> dict:
-    """Get available appointment statuses.
+    """Get available appointment statuses configured in the system.
 
     Returns:
-        dict with list of appointment statuses on success, or error/text on failure
+        dict with array of status objects containing:
+        status (code), description, color, active flag
+        Common statuses: t (To Do), H (Here), P (Picked), B (Billed), N (No Show), C (Cancelled)
     """
     resp = oscar_request("GET", "/ws/services/schedule/statuses", tool_context.state.get("session_id"))
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
@@ -35,10 +39,11 @@ def get_appointment_statuses(tool_context) -> dict:
 
 
 def get_appointment_types(tool_context) -> dict:
-    """Get available appointment types.
+    """Get available appointment types configured in the system.
 
     Returns:
-        dict with list of appointment types on success, or error/text on failure
+        dict with array of appointment type objects containing:
+        name, duration (default minutes), location, notes
     """
     resp = oscar_request("GET", "/ws/services/schedule/types", tool_context.state.get("session_id"))
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
@@ -53,17 +58,17 @@ def create_appointment(patient_id: int, provider_no: str, date: str, start_time:
 
     Args:
         patient_id: Patient demographic ID
-        provider_no: Provider ID
+        provider_no: Provider ID (use get_providers or get_current_provider to find)
         date: Appointment date in YYYY-MM-DD format
-        start_time: Start time in HH:MM format (24h)
-        duration: Duration in minutes
-        reason: Appointment reason (optional)
-        notes: Appointment notes (optional)
-        appointment_type: Appointment type (optional)
-        status: Appointment status (optional)
+        start_time: Start time in HH:MM format (24-hour, e.g., "14:30")
+        duration: Duration in minutes (e.g., 15, 30, 60)
+        reason: Appointment reason/chief complaint (optional)
+        notes: Internal notes (optional)
+        appointment_type: Type from get_appointment_types (optional)
+        status: Status code from get_appointment_statuses (optional, defaults to "t")
 
     Returns:
-        dict with created appointment on success, or error/text on failure
+        dict with created appointment including id, appointmentDate, startTime, etc.
     """
     data = {
         "demographicNo": patient_id,
@@ -92,10 +97,12 @@ def update_appointment_status(appointment_id: int, status: str, tool_context) ->
 
     Args:
         appointment_id: Appointment ID
-        status: New status value
+        status: New status code. Common values:
+            t (To Do), H (Here), P (Picked), B (Billed), N (No Show), C (Cancelled)
+            Use get_appointment_statuses to see all available codes.
 
     Returns:
-        dict with updated appointment on success, or error/text on failure
+        dict with updated appointment details
     """
     resp = oscar_request("POST", f"/ws/services/schedule/appointment/{appointment_id}/updateStatus",
                          tool_context.state.get("session_id"), json={"status": status})
@@ -111,7 +118,8 @@ def get_patient_appointment_history(patient_id: int, tool_context) -> dict:
         patient_id: Patient demographic ID
 
     Returns:
-        dict with patient's appointment history on success, or error/text on failure
+        dict with array of past and future appointments for the patient,
+        each containing id, appointmentDate, startTime, providerName, status, reason
     """
     resp = oscar_request("POST", f"/ws/services/schedule/{patient_id}/appointmentHistory", tool_context.state.get("session_id"))
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
@@ -120,13 +128,13 @@ def get_patient_appointment_history(patient_id: int, tool_context) -> dict:
 
 
 def delete_appointment(appointment_id: int, tool_context) -> dict:
-    """Delete an appointment.
+    """Delete/cancel an appointment.
 
     Args:
-        appointment_id: Appointment ID
+        appointment_id: Appointment ID to delete
 
     Returns:
-        dict with success status on success, or error/text on failure
+        dict with success: True on success, or error/text on failure
     """
     resp = oscar_request("POST", "/ws/services/schedule/deleteAppointment", tool_context.state.get("session_id"), json={"id": appointment_id})
     if resp.ok:

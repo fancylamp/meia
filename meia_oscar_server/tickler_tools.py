@@ -6,13 +6,15 @@ from tools import oscar_request
 
 
 def get_my_ticklers(tool_context, limit: int = 20) -> dict:
-    """Get ticklers assigned to the current provider.
+    """Get active ticklers/tasks assigned to the current provider.
 
     Args:
         limit: Maximum ticklers to return (default 20)
 
     Returns:
-        dict with list of ticklers on success, or error/text on failure
+        dict with array of ticklers, each containing:
+        id, demographicNo, demographicName, message, priority, status,
+        serviceDate, creator, creatorName, taskAssignedTo, taskAssignedToName
     """
     resp = oscar_request("GET", "/ws/services/tickler/mine", tool_context.state.get("session_id"),
                          params={"limit": limit})
@@ -26,13 +28,16 @@ def search_ticklers(tool_context, status: Optional[str] = "A", priority: Optiona
     """Search ticklers with filters.
 
     Args:
-        status: Tickler status - A (active), C (completed), D (deleted) (default A)
-        priority: Priority filter (optional)
+        status: Tickler status filter:
+            "A" - Active (default)
+            "C" - Completed
+            "D" - Deleted
+        priority: Priority filter - "Low", "Normal", "High" (optional)
         assignee: Provider ID to filter by assignee (optional)
         patient_id: Patient demographic ID to filter (optional)
 
     Returns:
-        dict with list of matching ticklers on success, or error/text on failure
+        dict with content array of matching ticklers and total count
     """
     data = {}
     if status:
@@ -53,17 +58,17 @@ def search_ticklers(tool_context, status: Optional[str] = "A", priority: Optiona
 
 def create_tickler(patient_id: int, task_assigned_to: str, service_date: str, message: str, tool_context,
                    priority: str = "Normal") -> dict:
-    """Create a new tickler/task.
+    """Create a new tickler/task reminder.
 
     Args:
         patient_id: Patient demographic ID
-        task_assigned_to: Provider ID to assign the tickler to
-        service_date: Service date in YYYY-MM-DD format
-        message: Tickler message content
-        priority: Priority level - Low, Normal, High (default Normal)
+        task_assigned_to: Provider ID to assign the tickler to (use get_current_provider for self)
+        service_date: Due/service date in YYYY-MM-DD format
+        message: Tickler message/reminder content
+        priority: Priority level - "Low", "Normal" (default), "High"
 
     Returns:
-        dict with created tickler on success, or error/text on failure
+        dict with success: true on success. Note: tickler ID not returned, use search to find.
     """
     data = {
         "demographicNo": patient_id,
@@ -83,10 +88,10 @@ def complete_ticklers(tickler_ids: list, tool_context) -> dict:
     """Mark ticklers as completed.
 
     Args:
-        tickler_ids: List of tickler IDs to complete
+        tickler_ids: List of tickler IDs to mark complete (e.g., [1, 2, 3])
 
     Returns:
-        dict with success status on success, or error/text on failure
+        dict with success status
     """
     resp = oscar_request("POST", "/ws/services/tickler/complete", tool_context.state.get("session_id"),
                          json={"ticklers": tickler_ids})
@@ -96,15 +101,15 @@ def complete_ticklers(tickler_ids: list, tool_context) -> dict:
 
 
 def add_tickler_note(tickler_id: int, patient_id: int, note_text: str, tool_context) -> dict:
-    """Add a note to an existing tickler.
+    """Add an encounter note linked to an existing tickler.
 
     Args:
         tickler_id: Tickler ID to attach the note to
         patient_id: Patient demographic ID
-        note_text: The note content
+        note_text: The note content (plain text or formatted)
 
     Returns:
-        dict with success status on success, or error/text on failure
+        dict with noteId of created note on success
     """
     note_data = {
         "note": note_text,

@@ -5,13 +5,14 @@ from tools import oscar_request
 
 
 def get_my_inbox(tool_context, limit: int = 20) -> dict:
-    """Get unacknowledged inbox items (labs/docs) for current provider.
+    """Get unacknowledged inbox items (labs, documents, reports) for current provider.
 
     Args:
         limit: Maximum items to return (default 20)
 
     Returns:
-        dict with list of inbox items on success, or error/text on failure
+        dict with array of inbox items, each containing:
+        id, type (LAB/DOC), demographicNo, demographicName, description, dateReceived, status
     """
     resp = oscar_request("GET", "/ws/services/inbox/mine", tool_context.state.get("session_id"),
                          params={"limit": limit})
@@ -24,7 +25,7 @@ def get_inbox_count(tool_context) -> dict:
     """Get count of unacknowledged inbox items for current provider.
 
     Returns:
-        dict with count on success, or error/text on failure
+        dict with count (integer) of pending inbox items requiring review
     """
     resp = oscar_request("GET", "/ws/services/inbox/mine/count", tool_context.state.get("session_id"))
     result = {"count": resp.text} if resp.ok else {"error": resp.status_code, "text": resp.text}

@@ -6,13 +6,17 @@ from tools import oscar_request
 
 
 def search_patients(query: str, tool_context) -> dict:
-    """Search patients by name or chart number.
+    """Search patients by name, chart number, or health insurance number.
 
     Args:
-        query: Search term (name or chart number)
+        query: Search term - can be:
+            - Patient name (partial match, e.g., "Smith" or "John S")
+            - Chart number
+            - Health insurance number (HIN)
 
     Returns:
-        dict with content list of matching patients on success, or error/text on failure
+        dict with content array of matching patients, each containing:
+        demographicNo, firstName, lastName, sex, dateOfBirth, hin, chartNo
     """
     resp = oscar_request("GET", "/ws/services/demographics/quickSearch", tool_context.state.get("session_id"), params={"query": query})
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
@@ -21,13 +25,16 @@ def search_patients(query: str, tool_context) -> dict:
 
 
 def get_patient_details(patient_id: int, tool_context) -> dict:
-    """Get patient details by ID.
+    """Get complete patient demographics by ID.
 
     Args:
-        patient_id: Patient demographic ID
+        patient_id: Patient demographic ID (demographicNo)
 
     Returns:
-        dict with patient demographics, contacts, and status lists on success, or error/text on failure
+        dict containing:
+        - demographics: firstName, lastName, dateOfBirth, sex, hin, address, phone, email, etc.
+        - contacts: emergency contacts and relationships
+        - statusLists: patient status flags
     """
     resp = oscar_request("GET", f"/ws/services/demographics/{patient_id}", tool_context.state.get("session_id"))
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
@@ -36,13 +43,14 @@ def get_patient_details(patient_id: int, tool_context) -> dict:
 
 
 def get_patient_allergies(patient_id: int, tool_context) -> dict:
-    """Get patient allergies.
+    """Get active allergies for a patient.
 
     Args:
         patient_id: Patient demographic ID
 
     Returns:
-        dict with list of active allergies on success, or error/text on failure
+        dict with array of active allergies, each containing:
+        description, reaction, severity, startDate, archived status
     """
     resp = oscar_request("GET", "/ws/services/allergies/active", tool_context.state.get("session_id"), params={"demographicNo": patient_id})
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
@@ -60,17 +68,17 @@ def create_patient(first_name: str, last_name: str, date_of_birth: str, sex: str
         first_name: Patient's first name
         last_name: Patient's last name
         date_of_birth: Date of birth in YYYY-MM-DD format
-        sex: Patient sex (M or F)
-        hin: Health insurance number (optional)
+        sex: Patient sex - "M" (male) or "F" (female)
+        hin: Health insurance number (optional, province-specific format)
         address: Street address (optional)
-        city: City (optional)
-        province: Province code e.g. ON (optional)
-        postal: Postal code (optional)
+        city: City name (optional)
+        province: Province code - ON, BC, AB, QC, etc. (optional)
+        postal: Postal code in A1A 1A1 format (optional)
         phone: Phone number (optional)
         email: Email address (optional)
 
     Returns:
-        dict with demographicNo and patient details on success, or error/text on failure
+        dict with demographicNo (new patient ID) and created patient details
     """
     dob_parts = date_of_birth.split("-")
     data = {
