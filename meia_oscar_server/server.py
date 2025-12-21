@@ -16,7 +16,6 @@ from typing import Dict
 
 import tools
 from tools import TOOL_DESCRIPTIONS
-from voice import VoiceTranscriber
 
 # Configuration
 OSCAR_URL = "https://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com:8443/oscar"
@@ -113,29 +112,6 @@ async def chat(request: Request):
         yield "data: [DONE]\n\n"
     
     return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-@app.websocket("/voice")
-async def voice_websocket(websocket: WebSocket, session_id: str):
-    if session_id not in sessions:
-        await websocket.close(code=4001)
-        return
-    
-    await websocket.accept()
-    
-    async def send_transcript(text: str):
-        await websocket.send_json({"transcript": text})
-    
-    transcriber = VoiceTranscriber(send_transcript)
-    
-    try:
-        while True:
-            data = await websocket.receive_bytes()
-            await transcriber.process_chunk(data)
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await transcriber.flush()
 
 
 if __name__ == "__main__":

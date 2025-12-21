@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from "react"
 import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
-import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Microphone, Stop } from "@phosphor-icons/react"
+import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
 
 type Message = { text: string; isUser: boolean; isStatus?: boolean }
@@ -54,12 +53,6 @@ export function MeiaPanel() {
     }
     setSending(false)
   }
-
-  const { isRecording, toggleRecording } = useVoiceInput(sessionId, {
-    onTranscript: sendToChat,
-    onModeChange: (active) => addStatusMessage(active ? "Voice mode activated" : "Voice mode deactivated"),
-    onError: () => addStatusMessage("An unexpected error occurred, please try again."),
-  })
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -127,20 +120,11 @@ export function MeiaPanel() {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !isRecording && sendMessage()}
-                placeholder={isRecording ? "Listening..." : "Type a message..."}
-                disabled={sending || isRecording}
-              />
-              <Button
-                size="icon"
-                variant={isRecording ? "destructive" : "outline"}
-                onClick={toggleRecording}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                placeholder="Type a message..."
                 disabled={sending}
-                className={isRecording ? "animate-pulse" : ""}
-              >
-                {isRecording ? <Stop weight="fill" /> : <Microphone />}
-              </Button>
-              <Button size="icon" onClick={sendMessage} disabled={sending || isRecording}>
+              />
+              <Button size="icon" onClick={sendMessage} disabled={sending}>
                 <PaperPlaneTilt />
               </Button>
             </div>
