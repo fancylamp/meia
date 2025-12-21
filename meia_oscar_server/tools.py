@@ -18,13 +18,44 @@ def oscar_request(method: str, endpoint: str, session_id: str, **kwargs) -> requ
     if not session:
         raise ValueError("Not authenticated")
     auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, session["access_token"], session["access_token_secret"], signature_method='HMAC-SHA1')
-    req = requests.Request(method, f"{OSCAR_URL}{endpoint}", auth=auth, **kwargs)
+    cookies = {"JSESSIONID": session.get("jsessionid")} if session.get("jsessionid") else {}
+    req = requests.Request(method, f"{OSCAR_URL}{endpoint}", auth=auth, cookies=cookies, **kwargs)
     prepared = req.prepare()
     resp = requests.Session().send(prepared, verify=False)
     print(f"[response] {resp.status_code} {resp.text}", flush=True, file=sys.stderr)
     return resp
 
 
-from demographic_tools import DEMOGRAPHIC_TOOLS, TOOL_DESCRIPTIONS
+from demographic_tools import DEMOGRAPHIC_TOOLS, TOOL_DESCRIPTIONS as DEMOGRAPHIC_DESCRIPTIONS
+from appointment_tools import APPOINTMENT_TOOLS, APPOINTMENT_TOOL_DESCRIPTIONS
+from measurement_tools import MEASUREMENT_TOOLS, MEASUREMENT_TOOL_DESCRIPTIONS
+from document_tools import DOCUMENT_TOOLS, DOCUMENT_TOOL_DESCRIPTIONS
+from provider_tools import PROVIDER_TOOLS, PROVIDER_TOOL_DESCRIPTIONS
+from rx_tools import RX_TOOLS, RX_TOOL_DESCRIPTIONS
+from tickler_tools import TICKLER_TOOLS, TICKLER_TOOL_DESCRIPTIONS
+from inbox_tools import INBOX_TOOLS, INBOX_TOOL_DESCRIPTIONS
+from notes_tools import NOTES_TOOLS, NOTES_TOOL_DESCRIPTIONS
 
-TOOLS = DEMOGRAPHIC_TOOLS
+TOOLS = (
+    DEMOGRAPHIC_TOOLS +
+    APPOINTMENT_TOOLS +
+    MEASUREMENT_TOOLS +
+    DOCUMENT_TOOLS +
+    PROVIDER_TOOLS +
+    RX_TOOLS +
+    TICKLER_TOOLS +
+    INBOX_TOOLS +
+    NOTES_TOOLS
+)
+
+TOOL_DESCRIPTIONS = {
+    **DEMOGRAPHIC_DESCRIPTIONS,
+    **APPOINTMENT_TOOL_DESCRIPTIONS,
+    **MEASUREMENT_TOOL_DESCRIPTIONS,
+    **DOCUMENT_TOOL_DESCRIPTIONS,
+    **PROVIDER_TOOL_DESCRIPTIONS,
+    **RX_TOOL_DESCRIPTIONS,
+    **TICKLER_TOOL_DESCRIPTIONS,
+    **INBOX_TOOL_DESCRIPTIONS,
+    **NOTES_TOOL_DESCRIPTIONS,
+}

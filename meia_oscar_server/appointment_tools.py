@@ -1,0 +1,153 @@
+"""OSCAR Appointment/Scheduling Tools"""
+
+import sys
+from typing import Optional
+from tools import oscar_request
+
+
+def get_daily_appointments(date: str, tool_context, provider_no: Optional[str] = None) -> dict:
+    """Get appointments for a specific day.
+
+    Args:
+        date: Date in YYYY-MM-DD format or "today"
+        provider_no: Provider ID or "me" for current user (optional, defaults to all providers)
+
+    Returns:
+        dict with list of appointments on success, or error/text on failure
+    """
+    endpoint = f"/ws/services/schedule/{provider_no}/day/{date}" if provider_no else f"/ws/services/schedule/day/{date}"
+    resp = oscar_request("GET", endpoint, tool_context.state.get("session_id"))
+    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
+    print(f"[get_daily_appointments] {result}", flush=True, file=sys.stderr)
+    return result
+
+
+def get_appointment_statuses(tool_context) -> dict:
+    """Get available appointment statuses.
+
+    Returns:
+        dict with list of appointment statuses on success, or error/text on failure
+    """
+    resp = oscar_request("GET", "/ws/services/schedule/statuses", tool_context.state.get("session_id"))
+    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
+    print(f"[get_appointment_statuses] {result}", flush=True, file=sys.stderr)
+    return result
+
+
+def get_appointment_types(tool_context) -> dict:
+    """Get available appointment types.
+
+    Returns:
+        dict with list of appointment types on success, or error/text on failure
+    """
+    resp = oscar_request("GET", "/ws/services/schedule/types", tool_context.state.get("session_id"))
+    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
+    print(f"[get_appointment_types] {result}", flush=True, file=sys.stderr)
+    return result
+
+
+def create_appointment(patient_id: int, provider_no: str, date: str, start_time: str, duration: int, tool_context,
+                       reason: Optional[str] = None, notes: Optional[str] = None, appointment_type: Optional[str] = None,
+                       status: Optional[str] = None) -> dict:
+    """Create a new appointment.
+
+    Args:
+        patient_id: Patient demographic ID
+        provider_no: Provider ID
+        date: Appointment date in YYYY-MM-DD format
+        start_time: Start time in HH:MM format (24h)
+        duration: Duration in minutes
+        reason: Appointment reason (optional)
+        notes: Appointment notes (optional)
+        appointment_type: Appointment type (optional)
+        status: Appointment status (optional)
+
+    Returns:
+        dict with created appointment on success, or error/text on failure
+    """
+    data = {
+        "demographicNo": patient_id,
+        "providerNo": provider_no,
+        "appointmentDate": date,
+        "startTime": start_time,
+        "duration": duration,
+    }
+    if reason:
+        data["reason"] = reason
+    if notes:
+        data["notes"] = notes
+    if appointment_type:
+        data["type"] = appointment_type
+    if status:
+        data["status"] = status
+
+    resp = oscar_request("POST", "/ws/services/schedule/add", tool_context.state.get("session_id"), json=data)
+    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
+    print(f"[create_appointment] {result}", flush=True, file=sys.stderr)
+    return result
+
+
+def update_appointment_status(appointment_id: int, status: str, tool_context) -> dict:
+    """Update an appointment's status.
+
+    Args:
+        appointment_id: Appointment ID
+        status: New status value
+
+    Returns:
+        dict with updated appointment on success, or error/text on failure
+    """
+    resp = oscar_request("POST", f"/ws/services/schedule/appointment/{appointment_id}/updateStatus",
+                         tool_context.state.get("session_id"), json={"status": status})
+    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
+    print(f"[update_appointment_status] {result}", flush=True, file=sys.stderr)
+    return result
+
+
+def get_patient_appointment_history(patient_id: int, tool_context) -> dict:
+    """Get appointment history for a patient.
+
+    Args:
+        patient_id: Patient demographic ID
+
+    Returns:
+        dict with patient's appointment history on success, or error/text on failure
+    """
+    resp = oscar_request("POST", f"/ws/services/schedule/{patient_id}/appointmentHistory", tool_context.state.get("session_id"))
+    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
+    print(f"[get_patient_appointment_history] {result}", flush=True, file=sys.stderr)
+    return result
+
+
+def delete_appointment(appointment_id: int, tool_context) -> dict:
+    """Delete an appointment.
+
+    Args:
+        appointment_id: Appointment ID
+
+    Returns:
+        dict with success status on success, or error/text on failure
+    """
+    resp = oscar_request("POST", "/ws/services/schedule/deleteAppointment", tool_context.state.get("session_id"), json={"id": appointment_id})
+    if resp.ok:
+        result = {"success": True, "status": resp.status_code}
+    else:
+        result = {"error": resp.status_code, "text": resp.text}
+    print(f"[delete_appointment] {result}", flush=True, file=sys.stderr)
+    return result
+
+
+APPOINTMENT_TOOLS = [
+    get_daily_appointments, get_appointment_statuses, get_appointment_types,
+    create_appointment, update_appointment_status, get_patient_appointment_history, delete_appointment
+]
+
+APPOINTMENT_TOOL_DESCRIPTIONS = {
+    "get_daily_appointments": "Fetching daily appointments...",
+    "get_appointment_statuses": "Fetching appointment statuses...",
+    "get_appointment_types": "Fetching appointment types...",
+    "create_appointment": "Creating appointment...",
+    "update_appointment_status": "Updating appointment status...",
+    "get_patient_appointment_history": "Fetching patient appointment history...",
+    "delete_appointment": "Deleting appointment...",
+}

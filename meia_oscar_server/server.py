@@ -57,13 +57,19 @@ runner = Runner(agent=oscar_agent, app_name="oscar_app", session_service=session
 @app.get("/auth/login")
 async def auth_login():
     session_id = str(uuid.uuid4())
-    # Request scopes for read/write access to demographics
+    # First make a request to get JSESSIONID cookie
+    init_resp = requests.get(f"{OSCAR_URL}/ws/services/providerService/providers", verify=False)
+    jsessionid = init_resp.cookies.get("JSESSIONID")
+    print(f"[init] Got JSESSIONID: {jsessionid}", flush=True)
+    
+    # Request scopes for read/write access
     params = {"scope": "read write"}
-    response = requests.post(f"{OSCAR_URL}/ws/oauth/initiate", auth=oauth1(callback=f"{BACKEND_URL}/auth/callback"), params=params, verify=False)
+    cookies = {"JSESSIONID": jsessionid} if jsessionid else {}
+    response = requests.post(f"{OSCAR_URL}/ws/oauth/initiate", auth=oauth1(callback=f"{BACKEND_URL}/auth/callback"), params=params, cookies=cookies, verify=False)
     print(f"[oauth/initiate] {response.status_code} {response.text}", flush=True)
     response.raise_for_status()
     creds = dict(x.split('=') for x in response.text.split('&'))
-    pending[creds['oauth_token']] = {"session_id": session_id, "secret": creds['oauth_token_secret']}
+    pending[creds['oauth_token']] = {"session_id": session_id, "secret": creds['oauth_token_secret'], "jsessionid": jsessionid}
     return JSONResponse({"session_id": session_id, "auth_url": f"{OSCAR_URL}/ws/oauth/authorize?oauth_token={creds['oauth_token']}"})
 
 
@@ -72,10 +78,11 @@ async def auth_callback(oauth_token: str, oauth_verifier: str):
     p = pending.pop(oauth_token, None)
     if not p:
         return HTMLResponse("<h1>Invalid token</h1>", status_code=400)
-    response = requests.post(f"{OSCAR_URL}/ws/oauth/token", auth=oauth1(oauth_token, p["secret"], verifier=oauth_verifier), verify=False)
+    cookies = {"JSESSIONID": p.get("jsessionid")} if p.get("jsessionid") else {}
+    response = requests.post(f"{OSCAR_URL}/ws/oauth/token", auth=oauth1(oauth_token, p["secret"], verifier=oauth_verifier), cookies=cookies, verify=False)
     response.raise_for_status()
     creds = dict(x.split('=') for x in response.text.split('&'))
-    sessions[p["session_id"]] = {"access_token": creds['oauth_token'], "access_token_secret": creds['oauth_token_secret']}
+    sessions[p["session_id"]] = {"access_token": creds['oauth_token'], "access_token_secret": creds['oauth_token_secret'], "jsessionid": p.get("jsessionid")}
     await session_service.create_session(app_name="oscar_app", user_id=p["session_id"], session_id=p["session_id"], state={"session_id": p["session_id"]})
     return HTMLResponse(f"""<!DOCTYPE html><html><body><h2>Success!</h2><script>
         window.opener?.postMessage({{type:'oauth_complete',session_id:'{p["session_id"]}',success:true}},'*');
