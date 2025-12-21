@@ -3,21 +3,19 @@ import ReactDOM from "react-dom/client"
 import { MeiaPanel } from "./components/MeiaPanel"
 import "./index.css"
 
-// Block meta refresh by intercepting before browser schedules it
-const blockRefresh = () => {
-  document.querySelectorAll('meta[http-equiv="refresh"]').forEach(el => el.remove());
-};
-blockRefresh();
-
-// Override document.write to catch dynamically written meta tags
-const originalWrite = document.write.bind(document);
-document.write = (html: string) => {
-  originalWrite(html.replace(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*>/gi, ''));
-};
-
-new MutationObserver(blockRefresh).observe(document.documentElement, { childList: true, subtree: true });
-
 document.documentElement.style.visibility = 'hidden';
+
+// Block OSCAR auto-refresh
+// Removing the tag doesn't cancel already-scheduled refresh, so we use window.stop()
+// We delay slightly to let other resources finish loading
+window.addEventListener('load', () => {
+  const tags = document.querySelectorAll('meta[http-equiv="refresh"]');
+  if (tags.length > 0) {
+    console.log('[MEIA] Blocking auto-refresh');
+    tags.forEach(el => el.remove());
+    window.stop();
+  }
+}, { once: true });
 
 function initExtension() {
   if (
