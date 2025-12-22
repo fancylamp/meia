@@ -1,6 +1,5 @@
 """OSCAR Tickler/Task Tools"""
 
-import sys
 from typing import Optional
 from tools import oscar_request
 
@@ -97,28 +96,6 @@ def complete_ticklers(tickler_ids: list, tool_context) -> dict:
                          json={"ticklers": tickler_ids})
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
     print(f"[complete_ticklers] {result}", flush=True, file=sys.stderr)
-    return result
-
-
-def add_tickler_note(tickler_id: int, patient_id: int, note_text: str, tool_context) -> dict:
-    """Add an encounter note linked to an existing tickler.
-
-    Args:
-        tickler_id: Tickler ID to attach the note to
-        patient_id: Patient demographic ID
-        note_text: The note content (plain text or formatted)
-
-    Returns:
-        dict with noteId of created note on success
-    """
-    note_data = {
-        "note": note_text,
-        "noteId": 0,
-        "tickler": {"id": int(tickler_id), "demographicNo": int(patient_id)}
-    }
-    resp = oscar_request("POST", "/ws/services/notes/ticklerSaveNote", tool_context.state.get("session_id"), json=note_data)
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[add_tickler_note] {result}", flush=True, file=sys.stderr)
     return result
 
 

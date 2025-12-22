@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { BACKEND_URL } from "./useAuth"
 
 export type Message = { text: string; isUser: boolean; isStatus?: boolean }
@@ -11,8 +11,6 @@ export function useChatSessions(sessionId: string | null, isAuthenticated: boole
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({})
   const [loading, setLoading] = useState(true)
-  const tabStatesRef = useRef(tabStates)
-  tabStatesRef.current = tabStates
 
   const fetchMessages = useCallback(async (chatId: string) => {
     if (!sessionId) return
