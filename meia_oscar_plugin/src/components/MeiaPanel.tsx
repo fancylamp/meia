@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
@@ -88,7 +88,7 @@ export function MeiaPanel() {
   }, [messages])
 
   const sendMessage = async () => {
-    if ((!input.trim() && !attachments.length) || sending) return
+    if ((!input.trim() && !attachments.length)) return
     const text = input.trim()
     const files = [...attachments]
     setInput("")
@@ -142,7 +142,7 @@ export function MeiaPanel() {
             <div className="flex-1 overflow-y-auto p-2 space-y-3">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.isUser ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert max-w-none [&_pre]:overflow-x-auto [&_pre]:max-w-full"}`}>
+                  <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_code]:break-all"}`}>
                     {m.isUser || m.isStatus ? m.text : <Markdown>{m.text}</Markdown>}
                   </div>
                 </div>
@@ -168,14 +168,16 @@ export function MeiaPanel() {
                 <Button size="icon" variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={sending}>
                   <Paperclip size={18} />
                 </Button>
-                <Input
+                <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendMessage())}
                   placeholder={dragOver ? "Drop files here..." : "Type a message..."}
                   disabled={sending}
+                  rows={1}
+                  className="min-h-0 max-h-32 py-2 resize-none overflow-y-auto"
                 />
-                <Button size="icon" onClick={sendMessage} disabled={sending && !attachments.length}>
+                <Button size="icon" onClick={sendMessage} disabled={!input.trim() && !attachments.length}>
                   <PaperPlaneTilt />
                 </Button>
               </div>

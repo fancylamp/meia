@@ -55,11 +55,11 @@ def create_appointment(patient_id: int, provider_no: str, date: str, start_time:
                        reason: Optional[str] = None, notes: Optional[str] = None, appointment_type: Optional[str] = None,
                        status: Optional[str] = None) -> dict:
     """Create a new appointment.
-
+    
     Args:
         patient_id: Patient demographic ID
         provider_no: Provider ID (use get_providers or get_current_provider to find)
-        date: Appointment date in YYYY-MM-DD format
+        date: Appointment date (e.g., "2025-12-21" for Dec 21, 2025)
         start_time: Start time in HH:MM format (24-hour, e.g., "14:30")
         duration: Duration in minutes (e.g., 15, 30, 60)
         reason: Appointment reason/chief complaint (optional)
@@ -70,12 +70,19 @@ def create_appointment(patient_id: int, provider_no: str, date: str, start_time:
     Returns:
         dict with created appointment including id, appointmentDate, startTime, etc.
     """
+    # Convert 24h time to 12h with AM/PM for OSCAR compatibility
+    h, m = map(int, start_time.split(":"))
+    period = "AM" if h < 12 else "PM"
+    h12 = h if 1 <= h <= 12 else (h - 12 if h > 12 else 12)
+    time_12h = f"{h12}:{m:02d} {period}"
+    
     data = {
         "demographicNo": patient_id,
         "providerNo": provider_no,
         "appointmentDate": date,
-        "startTime": start_time,
+        "startTime12hWithMedian": time_12h,
         "duration": duration,
+        "status": status or "t",  # Default to "To Do" status
     }
     if reason:
         data["reason"] = reason
@@ -83,8 +90,8 @@ def create_appointment(patient_id: int, provider_no: str, date: str, start_time:
         data["notes"] = notes
     if appointment_type:
         data["type"] = appointment_type
-    if status:
-        data["status"] = status
+
+    print(f"[create_appointment] REQUEST: {data}", flush=True, file=sys.stderr)
 
     resp = oscar_request("POST", "/ws/services/schedule/add", tool_context.state.get("session_id"), json=data)
     result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
