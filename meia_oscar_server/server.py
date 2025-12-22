@@ -121,18 +121,32 @@ async def chat(request: Request):
     
     async def event_stream():
         import json
-        content = types.Content(role="user", parts=[types.Part(text=data["message"])])
-        async for event in runner.run_async(user_id=session_id, session_id=session_id, new_message=content):
-            if not event.content or not event.content.parts:
-                continue
-            for part in event.content.parts:
-                if hasattr(part, 'function_call') and part.function_call:
-                    desc = TOOL_DESCRIPTIONS.get(part.function_call.name, f"Calling {part.function_call.name}...")
-                    yield f"data: {json.dumps({'type': 'tool_call', 'name': part.function_call.name, 'description': desc})}\n\n"
-                elif hasattr(part, 'function_response') and part.function_response:
-                    yield f"data: {json.dumps({'type': 'tool_result', 'name': part.function_response.name})}\n\n"
-                elif hasattr(part, 'text') and part.text and event.is_final_response():
-                    yield f"data: {json.dumps({'type': 'response', 'text': part.text})}\n\n"
+        parts = [types.Part(text=data["message"])] if data.get("message") else []
+        
+        # Store attachments in session for tool access
+        attachments = data.get("attachments", [])
+        if attachments:
+            sessions[session_id]["pending_attachments"] = attachments
+        
+        for att in attachments:
+            import base64
+            parts.append(types.Part(inline_data=types.Blob(mime_type=att["type"], data=base64.b64decode(att["data"]))))
+            parts.append(types.Part(text=f"[Attached file: {att['name']}, type: {att['type']}. To save this document, use save_document with file_contents='USE_PENDING_ATTACHMENT']"))
+        content = types.Content(role="user", parts=parts)
+        try:
+            async for event in runner.run_async(user_id=session_id, session_id=session_id, new_message=content):
+                if not event.content or not event.content.parts:
+                    continue
+                for part in event.content.parts:
+                    if hasattr(part, 'function_call') and part.function_call:
+                        desc = TOOL_DESCRIPTIONS.get(part.function_call.name, f"Calling {part.function_call.name}...")
+                        yield f"data: {json.dumps({'type': 'tool_call', 'name': part.function_call.name, 'description': desc})}\n\n"
+                    elif hasattr(part, 'function_response') and part.function_response:
+                        yield f"data: {json.dumps({'type': 'tool_result', 'name': part.function_response.name})}\n\n"
+                    elif hasattr(part, 'text') and part.text and event.is_final_response():
+                        yield f"data: {json.dumps({'type': 'response', 'text': part.text})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'response', 'text': f'Error: {e}'})}\n\n"
         yield "data: [DONE]\n\n"
     
     return StreamingResponse(event_stream(), media_type="text/event-stream")

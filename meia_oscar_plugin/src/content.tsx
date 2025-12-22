@@ -25,7 +25,7 @@ function initExtension() {
     const container = document.createElement("div");
     container.id = "meia-root";
     document.body.appendChild(container);
-    document.body.style.marginRight = "380px";
+    document.body.style.marginRight = "25vw";
 
     ReactDOM.createRoot(container).render(
       <React.StrictMode>
