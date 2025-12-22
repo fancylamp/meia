@@ -27,6 +27,7 @@ CONSUMER_SECRET = "3bbcwhshleje74mu"
 # Storage
 sessions: Dict[str, Dict] = {}
 pending: Dict[str, Dict] = {}
+user_chat_sessions: Dict[str, list] = {}  # {user_session_id: [chat_session_ids]}
 tools.init(OSCAR_URL, CONSUMER_KEY, CONSUMER_SECRET, sessions)
 
 app = FastAPI()
@@ -113,12 +114,61 @@ async def auth_status(session_id: str):
     return JSONResponse({"authenticated": session_id in sessions})
 
 
-@app.post("/chat")
-async def chat(request: Request):
+# ============ Chat Session Endpoints ============
+
+@app.post("/chat-sessions")
+async def create_chat_session(request: Request):
     data = await request.json()
     session_id = data.get("session_id")
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    chat_id = str(uuid.uuid4())
+    await session_service.create_session(app_name="oscar_app", user_id=session_id, session_id=chat_id, state={})
+    user_chat_sessions.setdefault(session_id, []).append(chat_id)
+    return JSONResponse({"id": chat_id})
+
+
+@app.get("/chat-sessions")
+async def list_chat_sessions(session_id: str):
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    return JSONResponse({"sessions": user_chat_sessions.get(session_id, [])})
+
+
+@app.get("/chat-sessions/{chat_id}/messages")
+async def get_chat_messages(chat_id: str, session_id: str):
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    session = await session_service.get_session(app_name="oscar_app", user_id=session_id, session_id=chat_id)
+    if not session:
+        return JSONResponse({"messages": []})
+    messages = []
+    for event in session.events:
+        if event.content and event.content.parts:
+            for part in event.content.parts:
+                if hasattr(part, 'text') and part.text:
+                    messages.append({"text": part.text, "isUser": event.content.role == "user"})
+    return JSONResponse({"messages": messages})
+
+
+@app.delete("/chat-sessions/{chat_id}")
+async def delete_chat_session(chat_id: str, session_id: str):
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    if session_id in user_chat_sessions:
+        user_chat_sessions[session_id] = [c for c in user_chat_sessions[session_id] if c != chat_id]
+    return JSONResponse({"success": True})
+
+
+@app.post("/chat")
+async def chat(request: Request):
+    data = await request.json()
+    session_id = data.get("session_id")
+    chat_session_id = data.get("chat_session_id")
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    if not chat_session_id:
+        return JSONResponse({"error": "chat_session_id required"}, status_code=400)
     
     async def event_stream():
         import json
@@ -135,7 +185,7 @@ async def chat(request: Request):
             parts.append(types.Part(text=f"[Attached file: {att['name']}, type: {att['type']}. To save this document, use save_document with file_contents='USE_PENDING_ATTACHMENT']"))
         content = types.Content(role="user", parts=parts)
         try:
-            async for event in runner.run_async(user_id=session_id, session_id=session_id, new_message=content):
+            async for event in runner.run_async(user_id=session_id, session_id=chat_session_id, new_message=content):
                 if not event.content or not event.content.parts:
                     continue
                 for part in event.content.parts:

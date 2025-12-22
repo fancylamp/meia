@@ -1,20 +1,19 @@
 import { useState, useRef, useEffect } from "react"
 import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
+import { useChatSessions, Message } from "@/hooks/useChatSessions"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X } from "@phosphor-icons/react"
+import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
 
-type Message = { text: string; isUser: boolean; isStatus?: boolean }
 type Attachment = { name: string; type: string; data: string }
 
 export function MeiaPanel() {
   const { sessionId, isAuthenticated, isLoading, error, login, logout } = useAuth()
+  const { tabs, activeTabId, messages, sending, loading, createTab, deleteTab, switchTab, addMessageToTab, setTabSending } = useChatSessions(sessionId, isAuthenticated)
   const [view, setView] = useState<"chat" | "settings">("chat")
-  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [sending, setSending] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -27,16 +26,12 @@ export function MeiaPanel() {
     "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "video/mp4", "video/quicktime", "video/x-matroska", "video/webm", "video/x-flv", "video/mpeg", "video/x-ms-wmv", "video/3gpp"
   ]
-  
-  const addStatusMessage = (text: string) => {
-    setMessages((m) => [...m, { text, isUser: false, isStatus: true }])
-  }
 
   const handleFiles = (files: FileList | null) => {
-    if (!files) return
+    if (!files || !activeTabId) return
     Array.from(files).forEach((file) => {
       if (!ALLOWED_TYPES.includes(file.type)) {
-        addStatusMessage(`Unsupported file type: ${file.name}`)
+        addMessageToTab(activeTabId, { text: `Unsupported file type: ${file.name}`, isUser: false, isStatus: true })
         return
       }
       const reader = new FileReader()
@@ -49,15 +44,16 @@ export function MeiaPanel() {
   }
 
   const sendToChat = async (text: string, files: Attachment[]) => {
-    if ((!text.trim() && !files.length) || !sessionId) return
+    if ((!text.trim() && !files.length) || !sessionId || !activeTabId) return
+    const targetTabId = activeTabId
     const displayText = files.length ? `${text} [${files.map((f) => f.name).join(", ")}]` : text
-    setMessages((m) => [...m, { text: displayText, isUser: true }])
-    setSending(true)
+    addMessageToTab(targetTabId, { text: displayText, isUser: true })
+    setTabSending(targetTabId, true)
     try {
       const res = await fetch(`${BACKEND_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, message: text, attachments: files.length ? files : undefined }),
+        body: JSON.stringify({ session_id: sessionId, chat_session_id: targetTabId, message: text, attachments: files.length ? files : undefined }),
       })
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
@@ -70,17 +66,17 @@ export function MeiaPanel() {
           try {
             const event = JSON.parse(line.slice(6))
             if (event.type === "tool_call") {
-              setMessages((m) => [...m, { text: event.description, isUser: false, isStatus: true }])
+              addMessageToTab(targetTabId, { text: event.description, isUser: false, isStatus: true })
             } else if (event.type === "response") {
-              setMessages((m) => [...m, { text: event.text, isUser: false }])
+              addMessageToTab(targetTabId, { text: event.text, isUser: false })
             }
           } catch {}
         }
       }
     } catch {
-      addStatusMessage("An unexpected error occurred, please try again.")
+      addMessageToTab(targetTabId, { text: "An unexpected error occurred, please try again.", isUser: false, isStatus: true })
     }
-    setSending(false)
+    setTabSending(targetTabId, false)
   }
 
   useEffect(() => {
@@ -88,7 +84,7 @@ export function MeiaPanel() {
   }, [messages])
 
   const sendMessage = async () => {
-    if ((!input.trim() && !attachments.length)) return
+    if (!input.trim() && !attachments.length) return
     const text = input.trim()
     const files = [...attachments]
     setInput("")
@@ -139,19 +135,41 @@ export function MeiaPanel() {
         </div>
         {view === "chat" ? (
           <>
-            <div className="flex-1 overflow-y-auto p-2 space-y-3">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.isUser ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_code]:break-all"}`}>
-                    {m.isUser || m.isStatus ? m.text : <Markdown>{m.text}</Markdown>}
-                  </div>
+            <div className="flex items-center border-b px-1 gap-1 overflow-x-auto">
+              {tabs.map((tabId, i) => (
+                <div
+                  key={tabId}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-t shrink-0 cursor-pointer ${tabId === activeTabId ? "bg-muted" : "hover:bg-accent"}`}
+                >
+                  <span onClick={() => switchTab(tabId)}>Tab</span>
+                  {tabs.length > 1 && (
+                    <X size={12} className="hover:text-destructive cursor-pointer" onClick={() => deleteTab(tabId)} />
+                  )}
                 </div>
               ))}
-              { sending && 
-                <div className="flex justify-start ml-2"><SpinnerGapIcon size={20} className="animate-spin" /></div>
-              }
-              <div ref={messagesEndRef} />
+              {tabs.length < 6 && (
+                <button onClick={createTab} className="p-1 hover:bg-accent rounded shrink-0">
+                  <Plus size={14} />
+                </button>
+              )}
             </div>
+            {loading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <SpinnerGapIcon size={24} className="animate-spin" />
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                {messages.map((m, i) => (
+                  <div key={i} className={`flex ${m.isUser ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_code]:break-all"}`}>
+                      {m.isUser || m.isStatus ? m.text : <Markdown>{m.text}</Markdown>}
+                    </div>
+                  </div>
+                ))}
+                {sending && <div className="flex justify-start ml-2"><SpinnerGapIcon size={20} className="animate-spin" /></div>}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
             <div className="p-3 border-t space-y-2">
               {attachments.length > 0 && (
                 <div className="flex flex-wrap gap-1">
