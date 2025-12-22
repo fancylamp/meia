@@ -57,7 +57,8 @@ export function useChatSessions(sessionId: string | null, isAuthenticated: boole
     if (activeTabId && !tabStates[activeTabId]?.messages.length) {
       fetchMessages(activeTabId)
     }
-  }, [activeTabId, fetchMessages, tabStates])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabId])
 
   const createTab = async () => {
     if (!sessionId || tabs.length >= 6) return

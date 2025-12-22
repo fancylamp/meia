@@ -1,6 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
-import { MeiaPanel } from "./components/MeiaPanel"
+import { ProviderPanel } from "./components/ProviderPanel"
+import { EncounterPanel } from "./components/EncounterPanel"
 import "./index.css"
 
 document.documentElement.style.visibility = 'hidden';
@@ -10,7 +11,6 @@ let stopDone = false;
 window.addEventListener('load', () => {
   const tags = document.querySelectorAll('meta[http-equiv="refresh"]');
   if (tags.length > 0) {
-    console.log('[MEIA] Blocking auto-refresh');
     tags.forEach(el => el.remove());
     window.stop();
   }
@@ -23,11 +23,26 @@ function tryInit() {
   initExtension();
 }
 
-function initExtension() {
-  if (
-    window.location.port === "8443" &&
-    window.location.pathname.startsWith("/oscar/provider")
-  ) {
+async function initExtension() {
+  const path = window.location.pathname;
+  const isProvider = path.startsWith("/oscar/provider");
+  const isEncounter = path.startsWith("/oscar/casemgmt/");
+
+  if (window.location.port === "8443" && (isProvider || isEncounter)) {
+    const result = await chrome.storage.local.get("meia_session_id");
+    
+    // Don't render encounter panel if not authenticated
+    if (isEncounter && !result.meia_session_id) {
+      document.documentElement.style.visibility = '';
+      return;
+    }
+
+    // Resize encounter window to full screen on startup
+    if (isEncounter) {
+      window.resizeTo(screen.availWidth, screen.availHeight);
+      window.moveTo(0, 0);
+    }
+
     const container = document.createElement("div");
     container.id = "meia-root";
     document.body.appendChild(container);
@@ -35,7 +50,7 @@ function initExtension() {
 
     ReactDOM.createRoot(container).render(
       <React.StrictMode>
-        <MeiaPanel />
+        {isEncounter ? <EncounterPanel /> : <ProviderPanel />}
       </React.StrictMode>
     );
   }
@@ -45,7 +60,7 @@ function initExtension() {
 if (document.body) {
   tryInit();
 } else {
-  const observer = new MutationObserver((mutations, obs) => {
+  const observer = new MutationObserver((_mutations, obs) => {
     if (document.body) {
       obs.disconnect();
       tryInit();

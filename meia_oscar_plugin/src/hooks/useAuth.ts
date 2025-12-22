@@ -22,7 +22,7 @@ export function useAuth() {
   useEffect(() => {
     const init = async () => {
       const result = await chrome.storage.local.get(STORAGE_KEY)
-      const stored = result[STORAGE_KEY]
+      const stored = result[STORAGE_KEY] as string | undefined
       if (stored) {
         const valid = await checkSession(stored)
         if (valid) {

@@ -14,7 +14,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["*.woff2", "*.css", "logo.svg"],
+      "resources": ["*.woff2", "*.css", "logo.svg", "icon.png", "pcm-processor.js"],
       "matches": ["*://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com/*"]
     }
   ]

@@ -12,10 +12,16 @@ import requests
 import uvicorn
 import uuid
 import os
+import json
+import logging
 from typing import Dict
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
 
 import tools
 from tools import TOOL_DESCRIPTIONS
+from transcribe import EncounterTranscriber
 
 # Configuration
 OSCAR_URL = "https://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com:8443/oscar"
@@ -75,6 +81,7 @@ runner = Runner(agent=oscar_agent, app_name="oscar_app", session_service=session
 
 @app.get("/auth/login")
 async def auth_login():
+    log.info("[/auth/login] Request received")
     session_id = str(uuid.uuid4())
     # First make a request to get JSESSIONID cookie
     init_resp = requests.get(f"{OSCAR_URL}/ws/services/providerService/providers", verify=False)
@@ -89,11 +96,13 @@ async def auth_login():
     response.raise_for_status()
     creds = dict(x.split('=') for x in response.text.split('&'))
     pending[creds['oauth_token']] = {"session_id": session_id, "secret": creds['oauth_token_secret'], "jsessionid": jsessionid}
+    log.info(f"[/auth/login] Created session {session_id}")
     return JSONResponse({"session_id": session_id, "auth_url": f"{OSCAR_URL}/ws/oauth/authorize?oauth_token={creds['oauth_token']}"})
 
 
 @app.get("/auth/callback")
 async def auth_callback(oauth_token: str, oauth_verifier: str):
+    log.info(f"[/auth/callback] token={oauth_token}")
     p = pending.pop(oauth_token, None)
     if not p:
         return HTMLResponse("<h1>Invalid token</h1>", status_code=400)
@@ -102,6 +111,7 @@ async def auth_callback(oauth_token: str, oauth_verifier: str):
     response.raise_for_status()
     creds = dict(x.split('=') for x in response.text.split('&'))
     sessions[p["session_id"]] = {"access_token": creds['oauth_token'], "access_token_secret": creds['oauth_token_secret'], "jsessionid": p.get("jsessionid")}
+    log.info(f"[/auth/callback] Session {p['session_id']} authenticated")
     await session_service.create_session(app_name="oscar_app", user_id=p["session_id"], session_id=p["session_id"], state={"session_id": p["session_id"]})
     return HTMLResponse(f"""<!DOCTYPE html><html><body><h2>Success!</h2><script>
         window.opener?.postMessage({{type:'oauth_complete',session_id:'{p["session_id"]}',success:true}},'*');
@@ -111,7 +121,9 @@ async def auth_callback(oauth_token: str, oauth_verifier: str):
 
 @app.get("/auth/status")
 async def auth_status(session_id: str):
-    return JSONResponse({"authenticated": session_id in sessions})
+    authenticated = session_id in sessions
+    log.info(f"[/auth/status] session={session_id[:8]}... authenticated={authenticated}")
+    return JSONResponse({"authenticated": authenticated})
 
 
 # ============ Chat Session Endpoints ============
@@ -120,11 +132,13 @@ async def auth_status(session_id: str):
 async def create_chat_session(request: Request):
     data = await request.json()
     session_id = data.get("session_id")
+    log.info(f"[POST /chat-sessions] session={session_id[:8] if session_id else None}...")
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     chat_id = str(uuid.uuid4())
-    await session_service.create_session(app_name="oscar_app", user_id=session_id, session_id=chat_id, state={})
+    await session_service.create_session(app_name="oscar_app", user_id=session_id, session_id=chat_id, state={"session_id": session_id})
     user_chat_sessions.setdefault(session_id, []).append(chat_id)
+    log.info(f"[POST /chat-sessions] Created chat {chat_id}")
     return JSONResponse({"id": chat_id})
 
 
@@ -165,14 +179,26 @@ async def chat(request: Request):
     data = await request.json()
     session_id = data.get("session_id")
     chat_session_id = data.get("chat_session_id")
+    log.info(f"[POST /chat] session={session_id[:8] if session_id else None}... chat={chat_session_id} msg={data.get('message', '')[:50]}...")
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     if not chat_session_id:
         return JSONResponse({"error": "chat_session_id required"}, status_code=400)
     
+    # Create session if it doesn't exist (e.g., "encounter" for EncounterPanel)
+    session = await session_service.get_session(app_name="oscar_app", user_id=session_id, session_id=chat_session_id)
+    if not session:
+        await session_service.create_session(app_name="oscar_app", user_id=session_id, session_id=chat_session_id, state={"session_id": session_id})
+    
+    # Prepend context to message if provided
+    message = data.get("message", "")
+    if data.get("context"):
+        log.info(f"[POST /chat] Prepending context ({len(data['context'])} chars)")
+        message = f"{data['context']}\n\n{message}"
+    
     async def event_stream():
         import json
-        parts = [types.Part(text=data["message"])] if data.get("message") else []
+        parts = [types.Part(text=message)] if message else []
         
         # Store attachments in session for tool access
         attachments = data.get("attachments", [])
@@ -201,6 +227,33 @@ async def chat(request: Request):
         yield "data: [DONE]\n\n"
     
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ============ Encounter Recording WebSocket ============
+
+@app.websocket("/recording/")
+async def recording_websocket(websocket: WebSocket):
+    await websocket.accept()
+    log.info("[WS /recording/] Connection opened")
+    
+    async def send_transcript(data: dict):
+        await websocket.send_json(data)
+    
+    transcriber = EncounterTranscriber(send_transcript)
+    
+    try:
+        while True:
+            data = await websocket.receive()
+            if "text" in data and data["text"] == "end":
+                log.info("[WS /recording/] End signal received, finishing...")
+                final_text = await transcriber.finish()
+                log.info(f"[WS /recording/] Final transcription: {final_text[:100]}..." if len(final_text) > 100 else f"[WS /recording/] Final transcription: {final_text}")
+                await websocket.send_json({"type": "complete", "text": final_text})
+                break
+            elif "bytes" in data:
+                await transcriber.process_chunk(data["bytes"])
+    except WebSocketDisconnect:
+        log.info("[WS /recording/] Connection closed")
 
 
 if __name__ == "__main__":

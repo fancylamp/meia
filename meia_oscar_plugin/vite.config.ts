@@ -13,6 +13,8 @@ export default defineConfig({
       closeBundle() {
         copyFileSync("public/manifest.json", "dist/manifest.json")
         copyFileSync("public/logo.svg", "dist/logo.svg")
+        copyFileSync("public/icon.png", "dist/icon.png")
+        copyFileSync("public/pcm-processor.js", "dist/pcm-processor.js")
       },
     },
   ],

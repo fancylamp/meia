@@ -1,15 +1,14 @@
 import { useState, useRef, useEffect } from "react"
 import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
-import { useChatSessions, Message } from "@/hooks/useChatSessions"
+import { useChatSessions } from "@/hooks/useChatSessions"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
 
 type Attachment = { name: string; type: string; data: string }
 
-export function MeiaPanel() {
+export function ProviderPanel() {
   const { sessionId, isAuthenticated, isLoading, error, login, logout } = useAuth()
   const { tabs, activeTabId, messages, sending, loading, createTab, deleteTab, switchTab, addMessageToTab, setTabSending } = useChatSessions(sessionId, isAuthenticated)
   const [view, setView] = useState<"chat" | "settings">("chat")
@@ -102,22 +101,14 @@ export function MeiaPanel() {
 
   if (!isAuthenticated) {
     return (
-      <div className="fixed top-0 right-0 w-[25vw] h-screen bg-background border-l flex flex-col">
-        <div className="flex-1 flex items-center justify-center p-4">
-          <Card className="w-full h-full">
-            <CardHeader className="text-center">
-              <img src={chrome.runtime.getURL("logo.svg")} alt="Meia" className="w-64 mx-auto mb-5" />
-              <CardTitle>Welcome to Meia</CardTitle>
-              <CardDescription>Connect and authorize with your OSCAR credentials.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center gap-4">
-              <Button onClick={login} disabled={isLoading} className="w-full">
-                {isLoading ? "Connecting..." : "Connect"}
-              </Button>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-            </CardContent>
-          </Card>
-        </div>
+      <div className="fixed top-0 right-0 w-[25vw] h-screen bg-background border-l flex flex-col items-center justify-center p-4">
+        <img src={chrome.runtime.getURL("logo.svg")} alt="Meia" className="w-64 mb-5" />
+        <h2 className="text-xl font-semibold">Welcome to Meia</h2>
+        <p className="text-sm text-muted-foreground mb-4">Connect and authorize with your OSCAR credentials.</p>
+        <Button onClick={login} disabled={isLoading} className="w-48">
+          {isLoading ? "Connecting..." : "Connect"}
+        </Button>
+        {error && <p className="text-sm text-destructive mt-2">{error}</p>}
       </div>
     )
   }
@@ -130,13 +121,14 @@ export function MeiaPanel() {
       onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
     >
       <div className="flex-1 flex flex-col">
-        <div className="p-3 border-b font-semibold">
+        <div className="p-3 border-b font-semibold flex items-center gap-2">
+          <img src={chrome.runtime.getURL("icon.png")} alt="" className="w-5 h-5" />
           {view === "chat" ? "Chat" : "Settings"}
         </div>
         {view === "chat" ? (
           <>
             <div className="flex items-center border-b px-1 gap-1 overflow-x-auto">
-              {tabs.map((tabId, i) => (
+              {tabs.map((tabId) => (
                 <div
                   key={tabId}
                   className={`flex items-center gap-1 px-2 py-1 text-xs rounded-t shrink-0 cursor-pointer ${tabId === activeTabId ? "bg-muted" : "hover:bg-accent"}`}
