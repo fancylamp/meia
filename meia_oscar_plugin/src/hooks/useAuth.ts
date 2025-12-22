@@ -21,14 +21,15 @@ export function useAuth() {
 
   useEffect(() => {
     const init = async () => {
-      const stored = localStorage.getItem(STORAGE_KEY)
+      const result = await chrome.storage.local.get(STORAGE_KEY)
+      const stored = result[STORAGE_KEY]
       if (stored) {
         const valid = await checkSession(stored)
         if (valid) {
           setSessionId(stored)
           setIsAuthenticated(true)
         } else {
-          localStorage.removeItem(STORAGE_KEY)
+          await chrome.storage.local.remove(STORAGE_KEY)
         }
       }
       setIsLoading(false)
@@ -37,11 +38,11 @@ export function useAuth() {
   }, [checkSession])
 
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    const handleMessage = async (event: MessageEvent) => {
       if (event.data.type === "oauth_complete") {
         if (event.data.success) {
           const sid = event.data.session_id
-          localStorage.setItem(STORAGE_KEY, sid)
+          await chrome.storage.local.set({ [STORAGE_KEY]: sid })
           setSessionId(sid)
           setIsAuthenticated(true)
           setError(null)
@@ -74,8 +75,8 @@ export function useAuth() {
     }
   }
 
-  const logout = () => {
-    localStorage.removeItem(STORAGE_KEY)
+  const logout = async () => {
+    await chrome.storage.local.remove(STORAGE_KEY)
     setSessionId(null)
     setIsAuthenticated(false)
   }

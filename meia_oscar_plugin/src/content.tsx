@@ -5,9 +5,8 @@ import "./index.css"
 
 document.documentElement.style.visibility = 'hidden';
 
-// Block OSCAR auto-refresh
-// Removing the tag doesn't cancel already-scheduled refresh, so we use window.stop()
-// We delay slightly to let other resources finish loading
+// Block OSCAR auto-refresh, then init extension
+let stopDone = false;
 window.addEventListener('load', () => {
   const tags = document.querySelectorAll('meta[http-equiv="refresh"]');
   if (tags.length > 0) {
@@ -15,7 +14,14 @@ window.addEventListener('load', () => {
     tags.forEach(el => el.remove());
     window.stop();
   }
+  stopDone = true;
+  tryInit();
 }, { once: true });
+
+function tryInit() {
+  if (!stopDone || !document.body) return;
+  initExtension();
+}
 
 function initExtension() {
   if (
@@ -37,17 +43,13 @@ function initExtension() {
 }
 
 if (document.body) {
-  initExtension();
+  tryInit();
 } else {
   const observer = new MutationObserver((mutations, obs) => {
     if (document.body) {
       obs.disconnect();
-      initExtension();
+      tryInit();
     }
   });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 }
