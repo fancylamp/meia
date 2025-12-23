@@ -4,7 +4,7 @@ import { useEncounterChat, Attachment } from "@/hooks/useEncounterChat"
 import { EncounterRecorder } from "./EncounterRecorder"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { PaperPlaneTilt, SpinnerGap, Paperclip, X } from "@phosphor-icons/react"
+import { PaperPlaneTilt, SpinnerGap, Paperclip, X, Copy, Check } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
 
 const ALLOWED_TYPES = [
@@ -24,17 +24,37 @@ export function EncounterPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [transcription, setTranscription] = useState<string | null>(null)
   const contextSentRef = useRef(false)
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+
+  const copyToClipboard = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text)
+    setCopiedIdx(idx)
+    setTimeout(() => setCopiedIdx(null), 1500)
+  }
 
   const encounterContext = useMemo(() => {
     const p = new URLSearchParams(window.location.search)
-    return `[Encounter Context]
+    return {
+      text: `[Encounter Context]
       Patient ID: ${p.get("demographicNo")}
       Provider ID: ${p.get("providerNo")}
       Appointment ID: ${p.get("appointmentNo")}
       Reason: ${p.get("reason")}
       Date: ${p.get("appointmentDate")}
-      Time: ${p.get("start_time")}`
-    }, [])
+      Time: ${p.get("start_time")}`,
+      patientId: p.get("demographicNo"),
+      reason: p.get("reason"),
+    }
+  }, [])
+
+  // Request patient summary on initialization
+  useEffect(() => {
+    if (sessionId && encounterContext.patientId && !contextSentRef.current) {
+      contextSentRef.current = true
+      const summaryPrompt = `Provide a brief summary for this patient including: past medical history, current medications, and reason for visit (${encounterContext.reason || 'not specified'}). Keep it concise (3-5 sentences).`
+      sendMessage(summaryPrompt, encounterContext.text, undefined, true)
+    }
+  }, [sessionId, encounterContext])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -58,13 +78,8 @@ export function EncounterPanel() {
 
   const handleSend = () => {
     if (!input.trim() && !attachments.length) return
-    // Build context: encounter info (once) + transcription (if available)
     let context: string | undefined
-    if (!contextSentRef.current) {
-      context = encounterContext
-      if (transcription) context += `\n\n[Encounter Transcription]\n${transcription}`
-      contextSentRef.current = true
-    } else if (transcription) {
+    if (transcription) {
       context = `[Encounter Transcription]\n${transcription}`
     }
     sendMessage(input.trim(), context, attachments.length ? attachments : undefined)
@@ -100,10 +115,15 @@ export function EncounterPanel() {
       <EncounterRecorder onTranscriptionComplete={handleTranscriptionComplete} />
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.isUser ? "justify-end" : "justify-start"}`}>
+          <div key={i} className={`${m.isUser ? "flex justify-end" : ""} group`}>
             <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert"}`}>
               {m.isUser || m.isStatus ? m.text : <Markdown>{m.text}</Markdown>}
             </div>
+            {!m.isUser && !m.isStatus && (
+              <button onClick={() => copyToClipboard(m.text, i)} className="mt-1 p-1 opacity-0 group-hover:opacity-100 hover:bg-accent rounded transition-opacity flex items-center gap-1 text-xs text-muted-foreground">
+                {copiedIdx === i ? <><Check size={12} className="text-green-500" /> Copied</> : <><Copy size={12} /> Copy</>}
+              </button>
+            )}
           </div>
         ))}
         {sending && <div className="flex justify-start ml-2"><SpinnerGap size={20} className="animate-spin" /></div>}

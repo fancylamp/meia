@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.adk import Agent, Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools import McpToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
+from mcp.client.stdio import StdioServerParameters
 from google.genai import types
 from requests_oauthlib import OAuth1
 import requests
@@ -14,7 +17,9 @@ import uuid
 import os
 import json
 import logging
+import asyncio
 from typing import Dict
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -46,14 +51,30 @@ def oauth1(token=None, token_secret=None, verifier=None, callback=None):
     return OAuth1(CONSUMER_KEY, CONSUMER_SECRET, token, token_secret, verifier=verifier, callback_uri=callback, signature_method='HMAC-SHA1', signature_type='AUTH_HEADER')
 
 
+# MCP Toolset for medical-mcp server
+mcp_path = Path(__file__).parent.parent / "medical-mcp-main" / "build" / "index.js"
+medical_mcp_toolset = McpToolset(
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(command="node", args=[str(mcp_path)]),
+        timeout=30.0,
+    ),
+)
+
 oscar_agent = Agent(
     name="oscar_agent",
     model=LiteLlm(model=f"bedrock/{BEDROCK_MODEL}"),
     instruction="""
         You are Meia, a medical assistant with access to the OSCAR EMR system. Your job is to assist the user (who can be a clinic administrator or a doctor)
-        in running clinic administration tasks. You have to your disposal powerful tools which access the OSCAR EMR API, which can mutate data in the database.
+        in running clinic administration tasks. 
+        
+        You have to your disposal powerful tools which access the OSCAR EMR API, which can mutate data in the database.
+        You are also capable of generating text, emails, referral letters, or whatever content relevant to clinic administration should the user request it.
 
-        Additionally, you are also capable of generating text, emails, referral letters, or whatever content relevant to clinic administration should the user request it.
+        == Decision support web search MCP ==
+        You also have various web search tools. These tools runs searches against knowledge sources such as PubMed and FDA drug database, etc.
+        If the user asks about a technical question regardling medical expertise, try to search through the sources first and then incorporate with your own knowledge to give a concise answer.
+        Remember, the user can always go to the source for more information or ask follow up questions.
+        The response of the MCP server includes hyperlinks to the articles associated. You should include these hyperlinks in a source section.
 
         IMPORTANT:
         When faced with a request with ambiguity which prevents accurate execution of task, ask for clarification before executing.
@@ -71,7 +92,7 @@ oscar_agent = Agent(
 
         Always use query tools to get the latest information from the system. Never make assumptions based on previous conversation context - always verify current state by querying.
     """,
-    tools=tools.TOOLS,
+    tools=tools.TOOLS + [medical_mcp_toolset],
 )
 
 runner = Runner(agent=oscar_agent, app_name="oscar_app", session_service=session_service)
@@ -254,6 +275,11 @@ async def recording_websocket(websocket: WebSocket):
                 await transcriber.process_chunk(data["bytes"])
     except WebSocketDisconnect:
         log.info("[WS /recording/] Connection closed")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await medical_mcp_toolset.close()
 
 
 if __name__ == "__main__":

@@ -11,10 +11,12 @@ export function useEncounterChat(sessionId: string | null) {
 
   const addMessage = (msg: Message) => setMessages((m) => [...m, msg])
 
-  const sendMessage = async (text: string, context?: string, attachments?: Attachment[]) => {
+  const sendMessage = async (text: string, context?: string, attachments?: Attachment[], hidden?: boolean) => {
     if ((!text.trim() && !attachments?.length) || !sessionId) return
-    const displayText = attachments?.length ? `${text} [${attachments.map((f) => f.name).join(", ")}]` : text
-    addMessage({ text: displayText, isUser: true })
+    if (!hidden) {
+      const displayText = attachments?.length ? `${text} [${attachments.map((f) => f.name).join(", ")}]` : text
+      addMessage({ text: displayText, isUser: true })
+    }
     setSending(true)
     try {
       const res = await fetch(`${BACKEND_URL}/chat`, {

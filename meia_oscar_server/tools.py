@@ -50,6 +50,25 @@ TOOLS = (
     UTIL_TOOLS
 )
 
+MCP_TOOL_DESCRIPTIONS = {
+    "search-drugs": "Searching FDA drug database...",
+    "get-drug-details": "Fetching drug details from FDA...",
+    "get-health-statistics": "Fetching WHO health statistics...",
+    "search-medical-literature": "Searching PubMed...",
+    "get-article-details": "Fetching article from PubMed...",
+    "search-drug-nomenclature": "Searching RxNorm...",
+    "search-google-scholar": "Searching Google Scholar...",
+    "search-clinical-guidelines": "Searching clinical guidelines...",
+    "search-medical-databases": "Searching medical databases...",
+    "search-medical-journals": "Searching medical journals...",
+    "get-cache-stats": "Fetching cache statistics...",
+    "search-pediatric-guidelines": "Searching AAP pediatric guidelines...",
+    "search-pediatric-literature": "Searching pediatric journals...",
+    "get-child-health-statistics": "Fetching child health statistics...",
+    "search-pediatric-drugs": "Searching pediatric drug information...",
+    "search-aap-guidelines": "Searching AAP guidelines...",
+}
+
 TOOL_DESCRIPTIONS = {
     **DEMOGRAPHIC_DESCRIPTIONS,
     **APPOINTMENT_TOOL_DESCRIPTIONS,
@@ -61,4 +80,5 @@ TOOL_DESCRIPTIONS = {
     **INBOX_TOOL_DESCRIPTIONS,
     **NOTES_TOOL_DESCRIPTIONS,
     **UTIL_TOOL_DESCRIPTIONS,
+    **MCP_TOOL_DESCRIPTIONS,
 }

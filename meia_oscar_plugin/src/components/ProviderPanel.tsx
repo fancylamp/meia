@@ -3,7 +3,7 @@ import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
 import { useChatSessions } from "@/hooks/useChatSessions"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus } from "@phosphor-icons/react"
+import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus, Copy, Check } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
 
 type Attachment = { name: string; type: string; data: string }
@@ -15,8 +15,15 @@ export function ProviderPanel() {
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const copyToClipboard = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text)
+    setCopiedIdx(idx)
+    setTimeout(() => setCopiedIdx(null), 1500)
+  }
 
   const ALLOWED_TYPES = [
     "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -152,10 +159,15 @@ export function ProviderPanel() {
             ) : (
               <div className="flex-1 overflow-y-auto p-2 space-y-3">
                 {messages.map((m, i) => (
-                  <div key={i} className={`flex ${m.isUser ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_code]:break-all"}`}>
+                  <div key={i} className={`${m.isUser ? "flex justify-end" : ""} group`}>
+                    <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_code]:break-all [&_a]:text-blue-600 [&_a]:underline [&_a]:hover:text-blue-800 dark:[&_a]:text-blue-400"}`}>
                       {m.isUser || m.isStatus ? m.text : <Markdown>{m.text}</Markdown>}
                     </div>
+                    {!m.isUser && !m.isStatus && (
+                      <button onClick={() => copyToClipboard(m.text, i)} className="mt-1 p-1 opacity-0 group-hover:opacity-100 hover:bg-accent rounded transition-opacity flex items-center gap-1 text-xs text-muted-foreground">
+                        {copiedIdx === i ? <><Check size={12} className="text-green-500" /> Copied</> : <><Copy size={12} /> Copy</>}
+                      </button>
+                    )}
                   </div>
                 ))}
                 {sending && <div className="flex justify-start ml-2"><SpinnerGapIcon size={20} className="animate-spin" /></div>}
