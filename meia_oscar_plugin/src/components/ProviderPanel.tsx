@@ -3,7 +3,10 @@ import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
 import { useChatSessions } from "@/hooks/useChatSessions"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus, Copy, Check } from "@phosphor-icons/react"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Item, ItemGroup, ItemContent, ItemTitle, ItemActions } from "@/components/ui/item"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ChatCircle, Gear, SignOut, PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus, Copy, Check, User } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
 
 type Attachment = { name: string; type: string; data: string }
@@ -11,11 +14,19 @@ type Attachment = { name: string; type: string; data: string }
 export function ProviderPanel() {
   const { sessionId, isAuthenticated, isLoading, error, login, logout } = useAuth()
   const { tabs, activeTabId, messages, sending, loading, createTab, deleteTab, switchTab, addMessageToTab, setTabSending } = useChatSessions(sessionId, isAuthenticated)
-  const [view, setView] = useState<"chat" | "settings">("chat")
+  const [view, setView] = useState<"chat" | "settings" | "personalization">("chat")
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  const [quickActions, setQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "What are your capabilities?", enabled: true }, { text: "Create a new patient", enabled: true }])
+  const [encounterQuickActions, setEncounterQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "Generate a note for this encounter", enabled: true }])
+  const [encounterEditingIndex, setEncounterEditingIndex] = useState<number | null>(null)
+  const [encounterEditText, setEncounterEditText] = useState("")
+  const [customPrompt, setCustomPrompt] = useState("")
+  const [savedCustomPrompt, setSavedCustomPrompt] = useState("")
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editText, setEditText] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -89,6 +100,29 @@ export function ProviderPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  useEffect(() => {
+    if (!sessionId || !isAuthenticated) return
+    fetch(`${BACKEND_URL}/personalization?session_id=${sessionId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.quick_actions) setQuickActions(data.quick_actions)
+        if (data.encounter_quick_actions) setEncounterQuickActions(data.encounter_quick_actions)
+        if (data.custom_prompt !== undefined) {
+          setCustomPrompt(data.custom_prompt)
+          setSavedCustomPrompt(data.custom_prompt)
+        }
+      })
+      .catch(console.error)
+  }, [sessionId, isAuthenticated])
+
+  const savePersonalization = (actions: typeof quickActions, encounterActions: typeof encounterQuickActions, prompt: string) => {
+    fetch(`${BACKEND_URL}/personalization`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, quick_actions: actions, encounter_quick_actions: encounterActions, custom_prompt: prompt })
+    })
+  }
+
   const sendMessage = async () => {
     if (!input.trim() && !attachments.length) return
     const text = input.trim()
@@ -130,7 +164,7 @@ export function ProviderPanel() {
       <div className="flex-1 flex flex-col">
         <div className="p-3 border-b font-semibold flex items-center gap-2">
           <img src={chrome.runtime.getURL("icon.png")} alt="" className="w-5 h-5" />
-          {view === "chat" ? "Chat" : "Settings"}
+          {view === "chat" ? "Chat" : view === "settings" ? "Settings" : "Personalization"}
         </div>
         {view === "chat" ? (
           <>
@@ -175,6 +209,13 @@ export function ProviderPanel() {
               </div>
             )}
             <div className="p-3 border-t space-y-2">
+              {quickActions.filter(a => a.enabled).length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {quickActions.filter(a => a.enabled).map((a, i) => (
+                    <button key={i} onClick={() => sendToChat(a.text, [])} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a.text}</button>
+                  ))}
+                </div>
+              )}
               {attachments.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {attachments.map((a, i) => (
@@ -205,18 +246,152 @@ export function ProviderPanel() {
               </div>
             </div>
           </>
-        ) : (
+        ) : view === "settings" ? (
           <div className="p-4 space-y-4">
             <p className="text-sm text-muted-foreground">Session: {sessionId?.slice(0, 8)}...</p>
             <Button variant="destructive" onClick={logout} className="w-full">
               <SignOut className="mr-2" /> Disconnect
             </Button>
           </div>
+        ) : (
+          <div className="p-4 space-y-4 overflow-y-auto flex-1">
+            <Card size="sm">
+              <CardHeader><CardTitle className="font-semibold">Quick actions</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">Provider view</p>
+                <ItemGroup className="gap-0">
+                  {quickActions.map((action, i) => (
+                    <Item key={i} size="xs">
+                      <ItemContent><ItemTitle>{action.text}</ItemTitle></ItemContent>
+                      <ItemActions>
+                        <Checkbox checked={action.enabled} onCheckedChange={() => {
+                          const updated = quickActions.map((item, j) => j === i ? { ...item, enabled: !item.enabled } : item)
+                          setQuickActions(updated)
+                          savePersonalization(updated, encounterQuickActions, customPrompt)
+                        }} />
+                        <button onClick={() => {
+                          const updated = quickActions.filter((_, j) => j !== i)
+                          setQuickActions(updated)
+                          savePersonalization(updated, encounterQuickActions, customPrompt)
+                        }} className="hover:text-destructive"><X size={14} /></button>
+                      </ItemActions>
+                    </Item>
+                  ))}
+                  {editingIndex === -1 && (
+                    <Item size="xs">
+                      <ItemContent>
+                        <input
+                          autoFocus
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && editText.trim()) {
+                              const updated = [...quickActions, { text: editText.trim(), enabled: true }]
+                              setQuickActions(updated)
+                              savePersonalization(updated, encounterQuickActions, customPrompt)
+                              setEditingIndex(null)
+                              setEditText("")
+                            } else if (e.key === "Escape") {
+                              setEditingIndex(null)
+                              setEditText("")
+                            }
+                          }}
+                          className="flex-1 bg-transparent border-b border-input text-sm outline-none"
+                          placeholder="Enter action text..."
+                        />
+                      </ItemContent>
+                      <ItemActions>
+                        <button onClick={() => {
+                          if (editText.trim()) {
+                            const updated = [...quickActions, { text: editText.trim(), enabled: true }]
+                            setQuickActions(updated)
+                            savePersonalization(updated, encounterQuickActions, customPrompt)
+                          }
+                          setEditingIndex(null)
+                          setEditText("")
+                        }} className="hover:text-green-500"><Check size={14} /></button>
+                        <button onClick={() => { setEditingIndex(null); setEditText("") }} className="hover:text-destructive"><X size={14} /></button>
+                      </ItemActions>
+                    </Item>
+                  )}
+                </ItemGroup>
+                <Button size="sm" variant="outline" disabled={editingIndex !== null} onClick={() => setEditingIndex(-1)}><Plus size={14} className="mr-1" />Add</Button>
+                <p className="text-xs text-muted-foreground mt-4">Encounter view</p>
+                <ItemGroup className="gap-0">
+                  {encounterQuickActions.map((action, i) => (
+                    <Item key={i} size="xs">
+                      <ItemContent><ItemTitle>{action.text}</ItemTitle></ItemContent>
+                      <ItemActions>
+                        <Checkbox checked={action.enabled} onCheckedChange={() => {
+                          const updated = encounterQuickActions.map((item, j) => j === i ? { ...item, enabled: !item.enabled } : item)
+                          setEncounterQuickActions(updated)
+                          savePersonalization(quickActions, updated, customPrompt)
+                        }} />
+                        <button onClick={() => {
+                          const updated = encounterQuickActions.filter((_, j) => j !== i)
+                          setEncounterQuickActions(updated)
+                          savePersonalization(quickActions, updated, customPrompt)
+                        }} className="hover:text-destructive"><X size={14} /></button>
+                      </ItemActions>
+                    </Item>
+                  ))}
+                  {encounterEditingIndex === -1 && (
+                    <Item size="xs">
+                      <ItemContent>
+                        <input
+                          autoFocus
+                          value={encounterEditText}
+                          onChange={(e) => setEncounterEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && encounterEditText.trim()) {
+                              const updated = [...encounterQuickActions, { text: encounterEditText.trim(), enabled: true }]
+                              setEncounterQuickActions(updated)
+                              savePersonalization(quickActions, updated, customPrompt)
+                              setEncounterEditingIndex(null)
+                              setEncounterEditText("")
+                            } else if (e.key === "Escape") {
+                              setEncounterEditingIndex(null)
+                              setEncounterEditText("")
+                            }
+                          }}
+                          className="flex-1 bg-transparent border-b border-input text-sm outline-none"
+                          placeholder="Enter action text..."
+                        />
+                      </ItemContent>
+                      <ItemActions>
+                        <button onClick={() => {
+                          if (encounterEditText.trim()) {
+                            const updated = [...encounterQuickActions, { text: encounterEditText.trim(), enabled: true }]
+                            setEncounterQuickActions(updated)
+                            savePersonalization(quickActions, updated, customPrompt)
+                          }
+                          setEncounterEditingIndex(null)
+                          setEncounterEditText("")
+                        }} className="hover:text-green-500"><Check size={14} /></button>
+                        <button onClick={() => { setEncounterEditingIndex(null); setEncounterEditText("") }} className="hover:text-destructive"><X size={14} /></button>
+                      </ItemActions>
+                    </Item>
+                  )}
+                </ItemGroup>
+                <Button size="sm" variant="outline" disabled={encounterEditingIndex !== null} onClick={() => setEncounterEditingIndex(-1)}><Plus size={14} className="mr-1" />Add</Button>
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader><CardTitle className="font-semibold">Custom prompts</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                <Textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="Enter custom instructions..." className="min-h-[240px]" />
+                <Button size="sm" disabled={customPrompt === savedCustomPrompt} onClick={() => { savePersonalization(quickActions, encounterQuickActions, customPrompt); setSavedCustomPrompt(customPrompt) }}>Save</Button>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
       <div className="w-12 border-l flex flex-col">
         <button onClick={() => setView("chat")} className={`h-12 flex items-center justify-center ${view === "chat" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
           <ChatCircle size={20} />
+        </button>
+        <button onClick={() => setView("personalization")} className={`h-12 flex items-center justify-center ${view === "personalization" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+          <User size={20} />
         </button>
         <button onClick={() => setView("settings")} className={`h-12 flex items-center justify-center ${view === "settings" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
           <Gear size={20} />

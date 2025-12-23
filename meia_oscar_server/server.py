@@ -39,6 +39,7 @@ CONSUMER_SECRET = "3bbcwhshleje74mu"
 sessions: Dict[str, Dict] = {}
 pending: Dict[str, Dict] = {}
 user_chat_sessions: Dict[str, list] = {}  # {user_session_id: [chat_session_ids]}
+personalization: Dict[str, Dict] = {}  # {provider_id: {quick_actions: [...], custom_prompt: str}}
 tools.init(OSCAR_URL, CONSUMER_KEY, CONSUMER_SECRET, sessions)
 
 app = FastAPI()
@@ -60,42 +61,45 @@ medical_mcp_toolset = McpToolset(
     ),
 )
 
-oscar_agent = Agent(
-    name="oscar_agent",
-    model=LiteLlm(model=f"bedrock/{BEDROCK_MODEL}"),
-    instruction="""
-        You are Meia, a medical assistant with access to the OSCAR EMR system. Your job is to assist the user (who can be a clinic administrator or a doctor)
-        in running clinic administration tasks. 
-        
-        You have to your disposal powerful tools which access the OSCAR EMR API, which can mutate data in the database.
-        You are also capable of generating text, emails, referral letters, or whatever content relevant to clinic administration should the user request it.
+BASE_INSTRUCTION = """
+    You are Meia, a medical assistant with access to the OSCAR EMR system. Your job is to assist the user (who can be a clinic administrator or a doctor)
+    in running clinic administration tasks. 
+    
+    You have to your disposal powerful tools which access the OSCAR EMR API, which can mutate data in the database.
+    You are also capable of generating text, emails, referral letters, or whatever content relevant to clinic administration should the user request it.
+    Refrain from using emojis. Maintain a professional tone and diction.
 
-        == Decision support web search MCP ==
-        You also have various web search tools. These tools runs searches against knowledge sources such as PubMed and FDA drug database, etc.
-        If the user asks about a technical question regardling medical expertise, try to search through the sources first and then incorporate with your own knowledge to give a concise answer.
-        Remember, the user can always go to the source for more information or ask follow up questions.
-        The response of the MCP server includes hyperlinks to the articles associated. You should include these hyperlinks in a source section.
+    == Decision support web search MCP ==
+    You also have various web search tools. These tools runs searches against knowledge sources such as PubMed and FDA drug database, etc.
+    If the user asks about a technical question regardling medical expertise, try to search through the sources first and then incorporate with your own knowledge to give a concise answer.
+    Remember, the user can always go to the source for more information or ask follow up questions.
+    The response of the MCP server includes hyperlinks to the articles associated. You should include these hyperlinks in a source section.
 
-        IMPORTANT:
-        When faced with a request with ambiguity which prevents accurate execution of task, ask for clarification before executing.
-        You must refuse requests not relevant to clinic administration.
-        Keep non-relevant details in your responses concise, the user can always ask clarifying questions.
+    IMPORTANT:
+    When faced with a request with ambiguity which prevents accurate execution of task, ask for clarification before executing.
+    You must refuse requests not relevant to clinic administration.
+    Keep non-relevant details in your responses concise, the user can always ask clarifying questions.
 
-        Before executing any WRITE operation (creating, saving, or updating data), you MUST:
-        1. Clearly show the user exactly what will be written (patient ID, content, values, etc.)
-        2. Ask for explicit confirmation before proceeding
-        3. Only execute the operation after the user confirms
+    Before executing any WRITE operation (creating, saving, or updating data), you MUST:
+    1. Clearly show the user exactly what will be written (patient ID, content, values, etc.)
+    2. Ask for explicit confirmation before proceeding
+    3. Only execute the operation after the user confirms
 
-        Write operations include: save_note, save_measurement, save_document, create_patient, create_appointment, create_tickler, update_appointment_status, complete_ticklers.
+    Write operations include: save_note, save_measurement, save_document, create_patient, create_appointment, create_tickler, update_appointment_status, complete_ticklers.
 
-        Read operations (search, get, list) can be executed without confirmation.
+    Read operations (search, get, list) can be executed without confirmation.
 
-        Always use query tools to get the latest information from the system. Never make assumptions based on previous conversation context - always verify current state by querying.
-    """,
-    tools=tools.TOOLS + [medical_mcp_toolset],
-)
+    Always use query tools to get the latest information from the system. Never make assumptions based on previous conversation context - always verify current state by querying.
+"""
 
-runner = Runner(agent=oscar_agent, app_name="oscar_app", session_service=session_service)
+def get_agent(custom_prompt: str = ""):
+    instruction = BASE_INSTRUCTION + (f"\n\n== User Custom Instructions ==\nThese are custom prompts specified by the user. You should apply them to the best of your ability but previous system prompts always take precedence:\n{custom_prompt}" if custom_prompt else "")
+    return Agent(
+        name="oscar_agent",
+        model=LiteLlm(model=f"bedrock/{BEDROCK_MODEL}"),
+        instruction=instruction,
+        tools=tools.TOOLS + [medical_mcp_toolset],
+    )
 
 
 # ============ OAuth Endpoints ============
@@ -132,6 +136,15 @@ async def auth_callback(oauth_token: str, oauth_verifier: str):
     response.raise_for_status()
     creds = dict(x.split('=') for x in response.text.split('&'))
     sessions[p["session_id"]] = {"access_token": creds['oauth_token'], "access_token_secret": creds['oauth_token_secret'], "jsessionid": p.get("jsessionid")}
+    
+    # Fetch provider ID
+    auth = oauth1(creds['oauth_token'], creds['oauth_token_secret'])
+    provider_resp = requests.get(f"{OSCAR_URL}/ws/services/providerService/provider/me", auth=auth, cookies=cookies, verify=False)
+    if provider_resp.ok:
+        provider_data = provider_resp.json()
+        sessions[p["session_id"]]["provider_id"] = provider_data.get("providerNo")
+        log.info(f"[/auth/callback] Provider ID: {provider_data.get('providerNo')}")
+    
     log.info(f"[/auth/callback] Session {p['session_id']} authenticated")
     await session_service.create_session(app_name="oscar_app", user_id=p["session_id"], session_id=p["session_id"], state={"session_id": p["session_id"]})
     return HTMLResponse(f"""<!DOCTYPE html><html><body><h2>Success!</h2><script>
@@ -195,6 +208,42 @@ async def delete_chat_session(chat_id: str, session_id: str):
     return JSONResponse({"success": True})
 
 
+# ============ Personalization Endpoints ============
+
+@app.get("/personalization")
+async def get_personalization(session_id: str):
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    provider_id = sessions[session_id].get("provider_id")
+    if not provider_id:
+        log.warning(f"[GET /personalization] No provider_id for session {session_id[:8]}...")
+        return JSONResponse({"error": "Provider ID not found"}, status_code=400)
+    defaults = {
+        "quick_actions": [{"text": "What are your capabilities?", "enabled": True}, {"text": "Create a new patient", "enabled": True}],
+        "encounter_quick_actions": [{"text": "Generate a note for this encounter", "enabled": True}],
+        "custom_prompt": ""
+    }
+    return JSONResponse({**defaults, **personalization.get(provider_id, {})})
+
+
+@app.put("/personalization")
+async def update_personalization(request: Request):
+    data = await request.json()
+    session_id = data.get("session_id")
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    provider_id = sessions[session_id].get("provider_id")
+    if not provider_id:
+        log.warning(f"[PUT /personalization] No provider_id for session {session_id[:8]}...")
+        return JSONResponse({"error": "Provider ID not found"}, status_code=400)
+    personalization[provider_id] = {
+        "quick_actions": data.get("quick_actions", []),
+        "encounter_quick_actions": data.get("encounter_quick_actions", []),
+        "custom_prompt": data.get("custom_prompt", "")
+    }
+    return JSONResponse({"success": True})
+
+
 @app.post("/chat")
 async def chat(request: Request):
     data = await request.json()
@@ -217,6 +266,12 @@ async def chat(request: Request):
         log.info(f"[POST /chat] Prepending context ({len(data['context'])} chars)")
         message = f"{data['context']}\n\n{message}"
     
+    # Get custom prompt for this user
+    provider_id = sessions[session_id].get("provider_id")
+    custom_prompt = personalization.get(provider_id, {}).get("custom_prompt", "") if provider_id else ""
+    agent = get_agent(custom_prompt)
+    agent_runner = Runner(agent=agent, app_name="oscar_app", session_service=session_service)
+    
     async def event_stream():
         import json
         parts = [types.Part(text=message)] if message else []
@@ -232,7 +287,7 @@ async def chat(request: Request):
             parts.append(types.Part(text=f"[Attached file: {att['name']}, type: {att['type']}. To save this document, use save_document with file_contents='USE_PENDING_ATTACHMENT']"))
         content = types.Content(role="user", parts=parts)
         try:
-            async for event in runner.run_async(user_id=session_id, session_id=chat_session_id, new_message=content):
+            async for event in agent_runner.run_async(user_id=session_id, session_id=chat_session_id, new_message=content):
                 if not event.content or not event.content.parts:
                     continue
                 for part in event.content.parts:

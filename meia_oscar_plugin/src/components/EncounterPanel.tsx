@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
 import { useEncounterChat, Attachment } from "@/hooks/useEncounterChat"
 import { EncounterRecorder } from "./EncounterRecorder"
 import { Button } from "@/components/ui/button"
@@ -25,6 +25,15 @@ export function EncounterPanel() {
   const [transcription, setTranscription] = useState<string | null>(null)
   const contextSentRef = useRef(false)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  const [quickActions, setQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "Generate a note for this encounter", enabled: true }])
+
+  useEffect(() => {
+    if (!sessionId) return
+    fetch(`${BACKEND_URL}/personalization?session_id=${sessionId}`)
+      .then(r => r.json())
+      .then(data => { if (data.encounter_quick_actions) setQuickActions(data.encounter_quick_actions) })
+      .catch(console.error)
+  }, [sessionId])
 
   const copyToClipboard = (text: string, idx: number) => {
     navigator.clipboard.writeText(text)
@@ -130,6 +139,13 @@ export function EncounterPanel() {
         <div ref={messagesEndRef} />
       </div>
       <div className="p-3 border-t space-y-2">
+        {quickActions.filter(a => a.enabled).length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {quickActions.filter(a => a.enabled).map((a, i) => (
+              <button key={i} onClick={() => { sendMessage(a.text, transcription ? `[Encounter Transcription]\n${transcription}` : undefined); setTranscription(null) }} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a.text}</button>
+            ))}
+          </div>
+        )}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {attachments.map((a, i) => (
