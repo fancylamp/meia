@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react"
 import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
-import { useEncounterChat, Attachment } from "@/hooks/useEncounterChat"
+import { useEncounterChat, type Attachment } from "@/hooks/useEncounterChat"
 import { EncounterRecorder } from "./EncounterRecorder"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -16,7 +16,7 @@ const ALLOWED_TYPES = [
 
 export function EncounterPanel() {
   const { sessionId, isLoading } = useAuth()
-  const { messages, sending, sendMessage, addMessage } = useEncounterChat(sessionId)
+  const { messages, sending, suggestedActions, sendMessage, addMessage, setSuggestedActions } = useEncounterChat(sessionId)
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
@@ -139,10 +139,13 @@ export function EncounterPanel() {
         <div ref={messagesEndRef} />
       </div>
       <div className="p-3 border-t space-y-2">
-        {quickActions.filter(a => a.enabled).length > 0 && (
+        {(suggestedActions.length > 0 || quickActions.filter(a => a.enabled).length > 0) && (
           <div className="flex flex-wrap gap-1">
+            {suggestedActions.map((a, i) => (
+              <button key={`s-${i}`} onClick={() => { setSuggestedActions([]); sendMessage(a) }} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a}</button>
+            ))}
             {quickActions.filter(a => a.enabled).map((a, i) => (
-              <button key={i} onClick={() => { sendMessage(a.text, transcription ? `[Encounter Transcription]\n${transcription}` : undefined); setTranscription(null) }} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a.text}</button>
+              <button key={i} onClick={() => { setSuggestedActions([]); sendMessage(a.text, transcription ? `[Encounter Transcription]\n${transcription}` : undefined); setTranscription(null) }} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a.text}</button>
             ))}
           </div>
         )}

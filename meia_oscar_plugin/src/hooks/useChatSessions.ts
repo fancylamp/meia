@@ -11,6 +11,7 @@ export function useChatSessions(sessionId: string | null, isAuthenticated: boole
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({})
   const [loading, setLoading] = useState(true)
+  const [suggestedActions, setSuggestedActions] = useState<string[]>([])
 
   const fetchMessages = useCallback(async (chatId: string) => {
     if (!sessionId) return
@@ -116,10 +117,12 @@ export function useChatSessions(sessionId: string | null, isAuthenticated: boole
     messages: activeState?.messages || [],
     sending: activeState?.sending || false,
     loading,
+    suggestedActions,
     createTab,
     deleteTab,
     switchTab,
     addMessageToTab,
     setTabSending,
+    setSuggestedActions,
   }
 }

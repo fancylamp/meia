@@ -13,7 +13,7 @@ type Attachment = { name: string; type: string; data: string }
 
 export function ProviderPanel() {
   const { sessionId, isAuthenticated, isLoading, error, login, logout } = useAuth()
-  const { tabs, activeTabId, messages, sending, loading, createTab, deleteTab, switchTab, addMessageToTab, setTabSending } = useChatSessions(sessionId, isAuthenticated)
+  const { tabs, activeTabId, messages, sending, loading, suggestedActions, createTab, deleteTab, switchTab, addMessageToTab, setTabSending, setSuggestedActions } = useChatSessions(sessionId, isAuthenticated)
   const [view, setView] = useState<"chat" | "settings" | "personalization">("chat")
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -86,6 +86,7 @@ export function ProviderPanel() {
               addMessageToTab(targetTabId, { text: event.description, isUser: false, isStatus: true })
             } else if (event.type === "response") {
               addMessageToTab(targetTabId, { text: event.text, isUser: false })
+              if (event.suggested_actions?.length) setSuggestedActions(event.suggested_actions)
             }
           } catch {}
         }
@@ -209,10 +210,13 @@ export function ProviderPanel() {
               </div>
             )}
             <div className="p-3 border-t space-y-2">
-              {quickActions.filter(a => a.enabled).length > 0 && (
+              {(suggestedActions.length > 0 || quickActions.filter(a => a.enabled).length > 0) && (
                 <div className="flex flex-wrap gap-1">
+                  {suggestedActions.map((a, i) => (
+                    <button key={`s-${i}`} onClick={() => { setSuggestedActions([]); sendToChat(a, []) }} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a}</button>
+                  ))}
                   {quickActions.filter(a => a.enabled).map((a, i) => (
-                    <button key={i} onClick={() => sendToChat(a.text, [])} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a.text}</button>
+                    <button key={i} onClick={() => { setSuggestedActions([]); sendToChat(a.text, []) }} disabled={sending} className="text-xs bg-muted hover:bg-accent px-2 py-1 rounded">{a.text}</button>
                   ))}
                 </div>
               )}

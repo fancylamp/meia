@@ -7,12 +7,14 @@ export type Attachment = { name: string; type: string; data: string }
 export function useEncounterChat(sessionId: string | null) {
   const [messages, setMessages] = useState<Message[]>([])
   const [sending, setSending] = useState(false)
+  const [suggestedActions, setSuggestedActions] = useState<string[]>([])
   const chatSessionId = useMemo(() => `encounter-${crypto.randomUUID()}`, [])
 
   const addMessage = (msg: Message) => setMessages((m) => [...m, msg])
 
   const sendMessage = async (text: string, context?: string, attachments?: Attachment[], hidden?: boolean) => {
     if ((!text.trim() && !attachments?.length) || !sessionId) return
+    setSuggestedActions([])  // Clear previous suggestions
     if (!hidden) {
       const displayText = attachments?.length ? `${text} [${attachments.map((f) => f.name).join(", ")}]` : text
       addMessage({ text: displayText, isUser: true })
@@ -37,6 +39,7 @@ export function useEncounterChat(sessionId: string | null) {
               addMessage({ text: event.description, isUser: false, isStatus: true })
             } else if (event.type === "response") {
               addMessage({ text: event.text, isUser: false })
+              if (event.suggested_actions?.length) setSuggestedActions(event.suggested_actions)
             }
           } catch {}
         }
@@ -49,5 +52,5 @@ export function useEncounterChat(sessionId: string | null) {
 
   const clearMessages = () => setMessages([])
 
-  return { messages, sending, sendMessage, addMessage, clearMessages }
+  return { messages, sending, suggestedActions, sendMessage, addMessage, clearMessages, setSuggestedActions }
 }

@@ -90,6 +90,12 @@ BASE_INSTRUCTION = """
     Read operations (search, get, list) can be executed without confirmation.
 
     Always use query tools to get the latest information from the system. Never make assumptions based on previous conversation context - always verify current state by querying.
+
+    == Suggested Quick Actions ==
+    At the END of your response, you may include suggested follow-up actions using this format:
+    [QUICK_ACTIONS: "Action 1", "Action 2", "Action 3", ...]
+    
+    Keep each action short (2-4 words). Use when natural follow-ups exist. Omit for purely informational responses.
 """
 
 def get_agent(custom_prompt: str = ""):
@@ -297,7 +303,16 @@ async def chat(request: Request):
                     elif hasattr(part, 'function_response') and part.function_response:
                         yield f"data: {json.dumps({'type': 'tool_result', 'name': part.function_response.name})}\n\n"
                     elif hasattr(part, 'text') and part.text and event.is_final_response():
-                        yield f"data: {json.dumps({'type': 'response', 'text': part.text})}\n\n"
+                        text = part.text
+                        suggested_actions = []
+                        # Parse quick actions from response
+                        import re
+                        match = re.search(r'\[QUICK_ACTIONS:\s*(.+?)\]', text)
+                        if match:
+                            text = text.replace(match.group(0), '').strip()
+                            suggested_actions = [a.strip().strip('"') for a in match.group(1).split(',')]
+                            log.info(f"[POST /chat] Parsed suggested actions: {suggested_actions}")
+                        yield f"data: {json.dumps({'type': 'response', 'text': text, 'suggested_actions': suggested_actions})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'response', 'text': f'Error: {e}'})}\n\n"
         yield "data: [DONE]\n\n"
