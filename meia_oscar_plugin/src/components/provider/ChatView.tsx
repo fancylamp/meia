@@ -5,7 +5,7 @@ import { PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus, Copy, Check } from 
 import Markdown from "react-markdown"
 
 type Attachment = { name: string; type: string; data: string }
-type Message = { text: string; isUser: boolean; isStatus?: boolean }
+type Message = { id?: string; text: string; isUser: boolean; isStatus?: boolean; isStreaming?: boolean }
 
 const ALLOWED_TYPES = [
   "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -75,11 +75,11 @@ export function ChatView({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  }, [messages, messages[messages.length - 1]?.text])
 
   return (
     <div
-      className={`flex-1 flex flex-col ${dragOver ? "ring-2 ring-primary ring-inset" : ""}`}
+      className={`flex-1 flex flex-col min-h-0 ${dragOver ? "ring-2 ring-primary ring-inset" : ""}`}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
       onDragLeave={(e) => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false) }}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}

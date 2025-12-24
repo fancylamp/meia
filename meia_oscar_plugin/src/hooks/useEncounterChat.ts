@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react"
 import { BACKEND_URL } from "./useAuth"
 
-export type Message = { text: string; isUser: boolean; isStatus?: boolean }
+export type Message = { id?: string; text: string; isUser: boolean; isStatus?: boolean; isStreaming?: boolean }
 export type Attachment = { name: string; type: string; data: string }
 
 export function useEncounterChat(sessionId: string | null) {
@@ -28,6 +28,8 @@ export function useEncounterChat(sessionId: string | null) {
       })
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
+      let streamingMsgId: string | null = null
+      let accumulatedText = ""
       while (reader) {
         const { done, value } = await reader.read()
         if (done) break
@@ -35,10 +37,41 @@ export function useEncounterChat(sessionId: string | null) {
           if (!line.startsWith("data: ") || line === "data: [DONE]") continue
           try {
             const event = JSON.parse(line.slice(6))
+            console.log('[SSE Event]', event)
             if (event.type === "tool_call") {
+              if (streamingMsgId) {
+                streamingMsgId = null
+                accumulatedText = ""
+              }
               addMessage({ text: event.description, isUser: false, isStatus: true })
+            } else if (event.type === "text_chunk" && event.text) {
+              if (!streamingMsgId) streamingMsgId = crypto.randomUUID()
+              accumulatedText += event.text
+              setMessages((m) => {
+                const idx = m.findIndex((x) => x.id === streamingMsgId)
+                if (idx >= 0) {
+                  const updated = [...m]
+                  updated[idx] = { ...m[idx], text: accumulatedText }
+                  return updated
+                }
+                return [...m, { id: streamingMsgId, text: accumulatedText, isUser: false, isStreaming: true }]
+              })
             } else if (event.type === "response") {
-              addMessage({ text: event.text, isUser: false })
+              if (streamingMsgId) {
+                setMessages((m) => {
+                  const idx = m.findIndex((x) => x.id === streamingMsgId)
+                  if (idx >= 0) {
+                    const updated = [...m]
+                    updated[idx] = { ...m[idx], isStreaming: false }
+                    return updated
+                  }
+                  return m
+                })
+                streamingMsgId = null
+                accumulatedText = ""
+              } else if (event.text) {
+                addMessage({ text: event.text, isUser: false })
+              }
               if (event.suggested_actions?.length) setSuggestedActions(event.suggested_actions)
             }
           } catch {}

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.adk import Agent, Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp.client.stdio import StdioServerParameters
@@ -280,6 +281,7 @@ async def chat(request: Request):
     
     async def event_stream():
         import json
+        import re
         parts = [types.Part(text=message)] if message else []
         
         # Store attachments in session for tool access
@@ -292,8 +294,10 @@ async def chat(request: Request):
             parts.append(types.Part(inline_data=types.Blob(mime_type=att["type"], data=base64.b64decode(att["data"]))))
             parts.append(types.Part(text=f"[Attached file: {att['name']}, type: {att['type']}. To save this document, use save_document with file_contents='USE_PENDING_ATTACHMENT']"))
         content = types.Content(role="user", parts=parts)
+        run_config = RunConfig(streaming_mode=StreamingMode.SSE)
+        streamed_text = ""
         try:
-            async for event in agent_runner.run_async(user_id=session_id, session_id=chat_session_id, new_message=content):
+            async for event in agent_runner.run_async(user_id=session_id, session_id=chat_session_id, new_message=content, run_config=run_config):
                 if not event.content or not event.content.parts:
                     continue
                 for part in event.content.parts:
@@ -302,17 +306,19 @@ async def chat(request: Request):
                         yield f"data: {json.dumps({'type': 'tool_call', 'name': part.function_call.name, 'description': desc})}\n\n"
                     elif hasattr(part, 'function_response') and part.function_response:
                         yield f"data: {json.dumps({'type': 'tool_result', 'name': part.function_response.name})}\n\n"
-                    elif hasattr(part, 'text') and part.text and event.is_final_response():
-                        text = part.text
-                        suggested_actions = []
-                        # Parse quick actions from response
-                        import re
-                        match = re.search(r'\[QUICK_ACTIONS:\s*(.+?)\]', text)
-                        if match:
-                            text = text.replace(match.group(0), '').strip()
-                            suggested_actions = [a.strip().strip('"') for a in match.group(1).split(',')]
-                            log.info(f"[POST /chat] Parsed suggested actions: {suggested_actions}")
-                        yield f"data: {json.dumps({'type': 'response', 'text': text, 'suggested_actions': suggested_actions})}\n\n"
+                    elif hasattr(part, 'text') and part.text:
+                        if event.is_final_response():
+                            suggested_actions = []
+                            match = re.search(r'\[QUICK_ACTIONS:\s*(.+?)\]', part.text)
+                            if match:
+                                suggested_actions = [a.strip().strip('"') for a in match.group(1).split(',')]
+                            yield f"data: {json.dumps({'type': 'response', 'suggested_actions': suggested_actions})}\n\n"
+                        else:
+                            chunk = re.sub(r'\[QUICK_ACTIONS:[^\]]+\]', '', part.text)
+                            # Skip if this is the cumulative chunk (equals accumulated text)
+                            if chunk and chunk != streamed_text:
+                                streamed_text += chunk
+                                yield f"data: {json.dumps({'type': 'text_chunk', 'text': chunk})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'response', 'text': f'Error: {e}'})}\n\n"
         yield "data: [DONE]\n\n"

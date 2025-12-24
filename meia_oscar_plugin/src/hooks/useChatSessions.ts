@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { BACKEND_URL } from "./useAuth"
 
-export type Message = { text: string; isUser: boolean; isStatus?: boolean }
+export type Message = { id?: string; text: string; isUser: boolean; isStatus?: boolean; isStreaming?: boolean }
 type TabState = { messages: Message[]; sending: boolean }
 
 const ACTIVE_TAB_KEY = "meia_active_tab"
@@ -96,10 +96,18 @@ export function useChatSessions(sessionId: string | null, isAuthenticated: boole
   }
 
   const addMessageToTab = (tabId: string, msg: Message) => {
-    setTabStates((s) => ({
-      ...s,
-      [tabId]: { ...s[tabId], messages: [...(s[tabId]?.messages || []), msg] }
-    }))
+    setTabStates((s) => {
+      const existing = s[tabId]?.messages || []
+      if (msg.id) {
+        const idx = existing.findIndex((m) => m.id === msg.id)
+        if (idx >= 0) {
+          const updated = [...existing]
+          updated[idx] = msg
+          return { ...s, [tabId]: { ...s[tabId], messages: updated } }
+        }
+      }
+      return { ...s, [tabId]: { ...s[tabId], messages: [...existing, msg] } }
+    })
   }
 
   const setTabSending = (tabId: string, sending: boolean) => {

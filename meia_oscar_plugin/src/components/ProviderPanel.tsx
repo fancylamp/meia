@@ -55,6 +55,8 @@ export function ProviderPanel() {
       })
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
+      let streamingMsgId: string | null = null
+      let accumulatedText = ""
       while (reader) {
         const { done, value } = await reader.read()
         if (done) break
@@ -64,9 +66,23 @@ export function ProviderPanel() {
           try {
             const event = JSON.parse(line.slice(6))
             if (event.type === "tool_call") {
+              if (streamingMsgId) {
+                streamingMsgId = null
+                accumulatedText = ""
+              }
               addMessageToTab(targetTabId, { text: event.description, isUser: false, isStatus: true })
+            } else if (event.type === "text_chunk" && event.text) {
+              if (!streamingMsgId) streamingMsgId = crypto.randomUUID()
+              accumulatedText += event.text
+              addMessageToTab(targetTabId, { id: streamingMsgId, text: accumulatedText, isUser: false, isStreaming: true })
             } else if (event.type === "response") {
-              addMessageToTab(targetTabId, { text: event.text, isUser: false })
+              if (streamingMsgId) {
+                addMessageToTab(targetTabId, { id: streamingMsgId, text: accumulatedText, isUser: false, isStreaming: false })
+                streamingMsgId = null
+                accumulatedText = ""
+              } else if (event.text) {
+                addMessageToTab(targetTabId, { text: event.text, isUser: false })
+              }
               if (event.suggested_actions?.length) setSuggestedActions(event.suggested_actions)
             }
           } catch {}
@@ -102,7 +118,7 @@ export function ProviderPanel() {
 
   return (
     <div className="fixed top-0 right-0 w-[25vw] h-screen bg-background border-l flex">
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="p-3 border-b font-semibold flex items-center gap-2">
           <img src={chrome.runtime.getURL("icon.png")} alt="" className="w-5 h-5" />
           {view === "chat" ? "Chat" : view === "settings" ? "Settings" : "Personalization"}
