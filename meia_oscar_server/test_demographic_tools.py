@@ -6,8 +6,10 @@ from unittest.mock import patch, MagicMock
 
 class TestSearchPatients:
     def test_search_patients_success(self, mock_tool_context, mock_oscar_response, mock_sessions):
-        with patch("demographic_tools.oscar_request") as mock_req:
+        with patch("demographic_tools.oscar_request") as mock_req, \
+             patch("demographic_tools.handle_response") as mock_handle:
             mock_req.return_value = mock_oscar_response([{"demographicNo": 1, "firstName": "John", "lastName": "Doe"}])
+            mock_handle.return_value = [{"demographicNo": 1, "firstName": "John", "lastName": "Doe"}]
             
             from demographic_tools import search_patients
             result = search_patients("John", mock_tool_context)
@@ -16,8 +18,10 @@ class TestSearchPatients:
             assert result == [{"demographicNo": 1, "firstName": "John", "lastName": "Doe"}]
 
     def test_search_patients_error(self, mock_tool_context, mock_oscar_response):
-        with patch("demographic_tools.oscar_request") as mock_req:
+        with patch("demographic_tools.oscar_request") as mock_req, \
+             patch("demographic_tools.handle_response") as mock_handle:
             mock_req.return_value = mock_oscar_response(ok=False, status_code=500, text="Server error")
+            mock_handle.return_value = {"error": 500, "text": "Server error"}
             
             from demographic_tools import search_patients
             result = search_patients("test", mock_tool_context)
@@ -27,8 +31,10 @@ class TestSearchPatients:
 
 class TestGetPatientDetails:
     def test_get_patient_details_success(self, mock_tool_context, mock_oscar_response):
-        with patch("demographic_tools.oscar_request") as mock_req:
+        with patch("demographic_tools.oscar_request") as mock_req, \
+             patch("demographic_tools.handle_response") as mock_handle:
             mock_req.return_value = mock_oscar_response({"demographicNo": 1, "firstName": "Jane"})
+            mock_handle.return_value = {"demographicNo": 1, "firstName": "Jane"}
             
             from demographic_tools import get_patient_details
             result = get_patient_details(1, mock_tool_context)
@@ -39,8 +45,10 @@ class TestGetPatientDetails:
 
 class TestGetPatientAllergies:
     def test_get_patient_allergies_success(self, mock_tool_context, mock_oscar_response):
-        with patch("demographic_tools.oscar_request") as mock_req:
+        with patch("demographic_tools.oscar_request") as mock_req, \
+             patch("demographic_tools.handle_response") as mock_handle:
             mock_req.return_value = mock_oscar_response([{"description": "Penicillin", "severity": "High"}])
+            mock_handle.return_value = [{"description": "Penicillin", "severity": "High"}]
             
             from demographic_tools import get_patient_allergies
             result = get_patient_allergies(1, mock_tool_context)

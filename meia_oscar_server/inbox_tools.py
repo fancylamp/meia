@@ -1,7 +1,6 @@
 """OSCAR Inbox/Labs/Docs Tools"""
 
-import sys
-from tools import oscar_request
+from tools import oscar_request, handle_response
 
 
 def get_my_inbox(tool_context, limit: int = 20) -> dict:
@@ -16,9 +15,7 @@ def get_my_inbox(tool_context, limit: int = 20) -> dict:
     """
     resp = oscar_request("GET", "/ws/services/inbox/mine", tool_context.state.get("session_id"),
                          params={"limit": limit})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_my_inbox] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_my_inbox")
 
 
 def get_inbox_count(tool_context) -> dict:
@@ -28,9 +25,7 @@ def get_inbox_count(tool_context) -> dict:
         dict with count (integer) of pending inbox items requiring review
     """
     resp = oscar_request("GET", "/ws/services/inbox/mine/count", tool_context.state.get("session_id"))
-    result = {"count": resp.text} if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_inbox_count] {result}", flush=True, file=sys.stderr)
-    return result
+    return {"count": resp.text} if resp.ok else {"error": resp.status_code, "text": resp.text}
 
 
 INBOX_TOOLS = [get_my_inbox, get_inbox_count]

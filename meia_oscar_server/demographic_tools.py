@@ -1,8 +1,7 @@
 """OSCAR Demographic/Patient Tools"""
 
-import sys
 from typing import Optional
-from tools import oscar_request
+from tools import oscar_request, handle_response
 
 
 def search_patients(query: str, tool_context) -> dict:
@@ -19,9 +18,7 @@ def search_patients(query: str, tool_context) -> dict:
         demographicNo, firstName, lastName, sex, dateOfBirth, hin, chartNo
     """
     resp = oscar_request("GET", "/ws/services/demographics/quickSearch", tool_context.state.get("session_id"), params={"query": query})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[search_patients] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "search_patients")
 
 
 def get_patient_details(patient_id: int, tool_context) -> dict:
@@ -37,9 +34,7 @@ def get_patient_details(patient_id: int, tool_context) -> dict:
         - statusLists: patient status flags
     """
     resp = oscar_request("GET", f"/ws/services/demographics/{patient_id}", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_patient_details] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_patient_details")
 
 
 def get_patient_allergies(patient_id: int, tool_context) -> dict:
@@ -53,9 +48,7 @@ def get_patient_allergies(patient_id: int, tool_context) -> dict:
         description, reaction, severity, startDate, archived status
     """
     resp = oscar_request("GET", "/ws/services/allergies/active", tool_context.state.get("session_id"), params={"demographicNo": patient_id})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_patient_allergies] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_patient_allergies")
 
 
 def create_patient(first_name: str, last_name: str, date_of_birth: str, sex: str, tool_context,
@@ -107,9 +100,7 @@ def create_patient(first_name: str, last_name: str, date_of_birth: str, sex: str
             data["address"]["postal"] = postal
 
     resp = oscar_request("POST", "/ws/services/demographics", tool_context.state.get("session_id"), json=data)
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[create_patient] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "create_patient")
 
 
 DEMOGRAPHIC_TOOLS = [search_patients, get_patient_details, get_patient_allergies, create_patient]

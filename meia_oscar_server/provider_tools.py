@@ -1,8 +1,7 @@
 """OSCAR Provider Tools"""
 
-import sys
 from typing import Optional
-from tools import oscar_request
+from tools import oscar_request, handle_response
 
 
 def get_providers(tool_context) -> dict:
@@ -14,9 +13,7 @@ def get_providers(tool_context) -> dict:
         specialty, status, ohipNo, team
     """
     resp = oscar_request("GET", "/ws/services/providerService/providers_json", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_providers] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_providers")
 
 
 def get_current_provider(tool_context) -> dict:
@@ -27,9 +24,7 @@ def get_current_provider(tool_context) -> dict:
         providerNo, firstName, lastName, providerType, specialty, ohipNo, email, phone
     """
     resp = oscar_request("GET", "/ws/services/providerService/provider/me", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_current_provider] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_current_provider")
 
 
 def get_provider(provider_id: str, tool_context) -> dict:
@@ -42,11 +37,8 @@ def get_provider(provider_id: str, tool_context) -> dict:
         dict with provider details:
         providerNo, firstName, lastName, providerType, specialty, status, ohipNo, team
     """
-    # Use the JSON endpoint instead of XML
     resp = oscar_request("GET", f"/ws/services/providerService/providerjson/{provider_id}", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_provider] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_provider")
 
 
 def search_providers(search_term: str, tool_context, active: bool = True) -> dict:
@@ -61,9 +53,7 @@ def search_providers(search_term: str, tool_context, active: bool = True) -> dic
     """
     resp = oscar_request("POST", "/ws/services/providerService/providers/search", tool_context.state.get("session_id"),
                          json={"searchTerm": search_term, "active": str(active).lower()})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[search_providers] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "search_providers")
 
 
 PROVIDER_TOOLS = [get_providers, get_current_provider, get_provider, search_providers]

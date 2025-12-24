@@ -12,17 +12,16 @@ interface PersonalizationViewProps {
   quickActions: QuickAction[]
   encounterQuickActions: QuickAction[]
   customPrompt: string
-  savedCustomPrompt: string
+  hasUnsavedPrompt: boolean
   setQuickActions: (actions: QuickAction[]) => void
   setEncounterQuickActions: (actions: QuickAction[]) => void
   setCustomPrompt: (prompt: string) => void
-  setSavedCustomPrompt: (prompt: string) => void
   savePersonalization: (actions: QuickAction[], encounterActions: QuickAction[], prompt: string) => void
 }
 
 export function PersonalizationView({
-  quickActions, encounterQuickActions, customPrompt, savedCustomPrompt,
-  setQuickActions, setEncounterQuickActions, setCustomPrompt, setSavedCustomPrompt, savePersonalization
+  quickActions, encounterQuickActions, customPrompt, hasUnsavedPrompt,
+  setQuickActions, setEncounterQuickActions, setCustomPrompt, savePersonalization
 }: PersonalizationViewProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState("")
@@ -157,7 +156,7 @@ export function PersonalizationView({
         <CardHeader><CardTitle className="font-semibold">Custom prompts</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           <Textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="Enter custom instructions..." className="min-h-[240px]" />
-          <Button size="sm" disabled={customPrompt === savedCustomPrompt} onClick={() => { savePersonalization(quickActions, encounterQuickActions, customPrompt); setSavedCustomPrompt(customPrompt) }}>Save</Button>
+          <Button size="sm" disabled={!hasUnsavedPrompt} onClick={() => savePersonalization(quickActions, encounterQuickActions, customPrompt)}>Save</Button>
         </CardContent>
       </Card>
     </div>

@@ -1,8 +1,7 @@
 """OSCAR Prescription/Rx Tools"""
 
-import sys
 from typing import Optional
-from tools import oscar_request
+from tools import oscar_request, handle_response
 
 
 def get_patient_medications(patient_id: int, tool_context, status: str = "current") -> dict:
@@ -22,9 +21,7 @@ def get_patient_medications(patient_id: int, tool_context, status: str = "curren
         startDate, endDate, prescribingProvider, instructions, archived
     """
     resp = oscar_request("GET", f"/ws/services/rx/drugs/{status}/{patient_id}", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_patient_medications] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_patient_medications")
 
 
 def get_prescriptions(patient_id: int, tool_context) -> dict:
@@ -39,9 +36,7 @@ def get_prescriptions(patient_id: int, tool_context) -> dict:
     """
     resp = oscar_request("GET", "/ws/services/rx/prescriptions", tool_context.state.get("session_id"),
                          params={"demographicNo": patient_id})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_prescriptions] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_prescriptions")
 
 
 def get_drug_history(drug_id: int, patient_id: int, tool_context) -> dict:
@@ -57,9 +52,7 @@ def get_drug_history(drug_id: int, patient_id: int, tool_context) -> dict:
     """
     resp = oscar_request("GET", "/ws/services/rx/history", tool_context.state.get("session_id"),
                          params={"id": drug_id, "demographicNo": patient_id})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_drug_history] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_drug_history")
 
 
 RX_TOOLS = [get_patient_medications, get_prescriptions, get_drug_history]

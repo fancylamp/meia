@@ -6,8 +6,10 @@ from unittest.mock import patch
 
 class TestGetPatientMeasurements:
     def test_get_patient_measurements(self, mock_tool_context, mock_oscar_response):
-        with patch("measurement_tools.oscar_request") as mock_req:
+        with patch("measurement_tools.oscar_request") as mock_req, \
+             patch("measurement_tools.handle_response") as mock_handle:
             mock_req.return_value = mock_oscar_response([{"type": "BP", "dataField": "120/80"}])
+            mock_handle.return_value = [{"type": "BP", "dataField": "120/80"}]
             
             from measurement_tools import get_patient_measurements
             result = get_patient_measurements(1, ["BP", "HR"], mock_tool_context)

@@ -35,11 +35,10 @@ def save_document(patient_id: int, provider_no: str, file_name: str, file_conten
         if not file_name or file_name == "USE_PENDING_ATTACHMENT":
             file_name = att["name"]
     
-    # Validate and normalize base64
+    # Validate base64
     import base64
     try:
-        decoded = base64.b64decode(file_contents)
-        file_contents = base64.b64encode(decoded).decode('ascii')
+        base64.b64decode(file_contents)
     except Exception as e:
         return {"error": f"Invalid base64 data: {e}"}
     

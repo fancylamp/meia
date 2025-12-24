@@ -26,6 +26,13 @@ def oscar_request(method: str, endpoint: str, session_id: str, **kwargs) -> requ
     return resp
 
 
+def handle_response(resp: requests.Response, name: str) -> dict:
+    """Standard response handling with logging."""
+    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
+    print(f"[{name}] {result}", flush=True, file=sys.stderr)
+    return result
+
+
 from demographic_tools import DEMOGRAPHIC_TOOLS, TOOL_DESCRIPTIONS as DEMOGRAPHIC_DESCRIPTIONS
 from appointment_tools import APPOINTMENT_TOOLS, APPOINTMENT_TOOL_DESCRIPTIONS
 from measurement_tools import MEASUREMENT_TOOLS, MEASUREMENT_TOOL_DESCRIPTIONS

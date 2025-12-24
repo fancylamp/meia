@@ -1,8 +1,7 @@
 """OSCAR Appointment/Scheduling Tools"""
 
-import sys
 from typing import Optional
-from tools import oscar_request
+from tools import oscar_request, handle_response
 
 
 def get_daily_appointments(date: str, tool_context, provider_no: Optional[str] = None) -> dict:
@@ -19,9 +18,7 @@ def get_daily_appointments(date: str, tool_context, provider_no: Optional[str] =
     """
     endpoint = f"/ws/services/schedule/{provider_no}/day/{date}" if provider_no else f"/ws/services/schedule/day/{date}"
     resp = oscar_request("GET", endpoint, tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_daily_appointments] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_daily_appointments")
 
 
 def get_appointment_statuses(tool_context) -> dict:
@@ -33,9 +30,7 @@ def get_appointment_statuses(tool_context) -> dict:
         Common statuses: t (To Do), H (Here), P (Picked), B (Billed), N (No Show), C (Cancelled)
     """
     resp = oscar_request("GET", "/ws/services/schedule/statuses", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_appointment_statuses] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_appointment_statuses")
 
 
 def get_appointment_types(tool_context) -> dict:
@@ -46,9 +41,7 @@ def get_appointment_types(tool_context) -> dict:
         name, duration (default minutes), location, notes
     """
     resp = oscar_request("GET", "/ws/services/schedule/types", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_appointment_types] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_appointment_types")
 
 
 def create_appointment(patient_id: int, provider_no: str, date: str, start_time: str, duration: int, tool_context,
@@ -91,12 +84,8 @@ def create_appointment(patient_id: int, provider_no: str, date: str, start_time:
     if appointment_type:
         data["type"] = appointment_type
 
-    print(f"[create_appointment] REQUEST: {data}", flush=True, file=sys.stderr)
-
     resp = oscar_request("POST", "/ws/services/schedule/add", tool_context.state.get("session_id"), json=data)
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[create_appointment] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "create_appointment")
 
 
 def update_appointment_status(appointment_id: int, status: str, tool_context) -> dict:
@@ -113,9 +102,7 @@ def update_appointment_status(appointment_id: int, status: str, tool_context) ->
     """
     resp = oscar_request("POST", f"/ws/services/schedule/appointment/{appointment_id}/updateStatus",
                          tool_context.state.get("session_id"), json={"status": status})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[update_appointment_status] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "update_appointment_status")
 
 
 def get_patient_appointment_history(patient_id: int, tool_context) -> dict:
@@ -129,9 +116,7 @@ def get_patient_appointment_history(patient_id: int, tool_context) -> dict:
         each containing id, appointmentDate, startTime, providerName, status, reason
     """
     resp = oscar_request("POST", f"/ws/services/schedule/{patient_id}/appointmentHistory", tool_context.state.get("session_id"))
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_patient_appointment_history] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_patient_appointment_history")
 
 
 def delete_appointment(appointment_id: int, tool_context) -> dict:
@@ -144,12 +129,7 @@ def delete_appointment(appointment_id: int, tool_context) -> dict:
         dict with success: True on success, or error/text on failure
     """
     resp = oscar_request("POST", "/ws/services/schedule/deleteAppointment", tool_context.state.get("session_id"), json={"id": appointment_id})
-    if resp.ok:
-        result = {"success": True, "status": resp.status_code}
-    else:
-        result = {"error": resp.status_code, "text": resp.text}
-    print(f"[delete_appointment] {result}", flush=True, file=sys.stderr)
-    return result
+    return {"success": True, "status": resp.status_code} if resp.ok else {"error": resp.status_code, "text": resp.text}
 
 
 APPOINTMENT_TOOLS = [

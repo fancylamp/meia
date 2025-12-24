@@ -16,7 +16,7 @@ export function ProviderPanel() {
   const [quickActions, setQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "What are your capabilities?", enabled: true }, { text: "Create a new patient", enabled: true }])
   const [encounterQuickActions, setEncounterQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "Generate a note for this encounter", enabled: true }])
   const [customPrompt, setCustomPrompt] = useState("")
-  const [savedCustomPrompt, setSavedCustomPrompt] = useState("")
+  const [hasUnsavedPrompt, setHasUnsavedPrompt] = useState(false)
 
   useEffect(() => {
     if (!sessionId || !isAuthenticated) return
@@ -27,7 +27,7 @@ export function ProviderPanel() {
         if (data.encounter_quick_actions) setEncounterQuickActions(data.encounter_quick_actions)
         if (data.custom_prompt !== undefined) {
           setCustomPrompt(data.custom_prompt)
-          setSavedCustomPrompt(data.custom_prompt)
+          setHasUnsavedPrompt(false)
         }
       })
       .catch(console.error)
@@ -38,7 +38,12 @@ export function ProviderPanel() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId, quick_actions: actions, encounter_quick_actions: encounterActions, custom_prompt: prompt })
-    })
+    }).then(() => setHasUnsavedPrompt(false))
+  }
+
+  const handleCustomPromptChange = (value: string) => {
+    setCustomPrompt(value)
+    setHasUnsavedPrompt(true)
   }
 
   const sendToChat = async (text: string, files: Attachment[]) => {
@@ -146,11 +151,10 @@ export function ProviderPanel() {
             quickActions={quickActions}
             encounterQuickActions={encounterQuickActions}
             customPrompt={customPrompt}
-            savedCustomPrompt={savedCustomPrompt}
+            hasUnsavedPrompt={hasUnsavedPrompt}
             setQuickActions={setQuickActions}
             setEncounterQuickActions={setEncounterQuickActions}
-            setCustomPrompt={setCustomPrompt}
-            setSavedCustomPrompt={setSavedCustomPrompt}
+            setCustomPrompt={handleCustomPromptChange}
             savePersonalization={savePersonalization}
           />
         )}

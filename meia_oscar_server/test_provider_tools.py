@@ -17,8 +17,10 @@ class TestGetProviders:
 
 class TestGetCurrentProvider:
     def test_get_current_provider(self, mock_tool_context, mock_oscar_response):
-        with patch("provider_tools.oscar_request") as mock_req:
+        with patch("provider_tools.oscar_request") as mock_req, \
+             patch("provider_tools.handle_response") as mock_handle:
             mock_req.return_value = mock_oscar_response({"providerNo": "999", "firstName": "Current"})
+            mock_handle.return_value = {"providerNo": "999", "firstName": "Current"}
             
             from provider_tools import get_current_provider
             result = get_current_provider(mock_tool_context)

@@ -3,19 +3,10 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { PaperPlaneTilt, SpinnerGapIcon, Paperclip, X, Plus, Copy, Check } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
-
-const stripQuickActions = (text: string) => text.replace(/\[QUICK_ACTIONS:[^\]]*\]/g, '').trim()
+import { ALLOWED_TYPES, stripQuickActions } from "@/lib/constants"
 
 type Attachment = { name: string; type: string; data: string }
 type Message = { id?: string; text: string; isUser: boolean; isStatus?: boolean; isStreaming?: boolean }
-
-const ALLOWED_TYPES = [
-  "image/png", "image/jpeg", "image/gif", "image/webp",
-  "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/html", "text/plain", "text/markdown", "application/msword",
-  "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "video/mp4", "video/quicktime", "video/x-matroska", "video/webm", "video/x-flv", "video/mpeg", "video/x-ms-wmv", "video/3gpp"
-]
 
 interface ChatViewProps {
   tabs: string[]

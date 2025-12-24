@@ -1,8 +1,7 @@
 """OSCAR Measurement/Vital Signs Tools"""
 
-import sys
 from typing import List, Optional
-from tools import oscar_request
+from tools import oscar_request, handle_response
 
 
 def get_patient_measurements(patient_id: int, types: List[str], tool_context) -> dict:
@@ -23,9 +22,7 @@ def get_patient_measurements(patient_id: int, types: List[str], tool_context) ->
         dict with measurements array containing type, dataField (value), dateObserved, comments
     """
     resp = oscar_request("POST", f"/ws/services/measurements/{patient_id}", tool_context.state.get("session_id"), json={"types": types})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_patient_measurements] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_patient_measurements")
 
 
 def save_measurement(patient_id: int, measurement_type: str, value: str, date_observed: str,
@@ -50,9 +47,7 @@ def save_measurement(patient_id: int, measurement_type: str, value: str, date_ob
         data["comments"] = comments
 
     resp = oscar_request("POST", f"/ws/services/measurements/{patient_id}/save", tool_context.state.get("session_id"), json=data)
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[save_measurement] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "save_measurement")
 
 
 MEASUREMENT_TOOLS = [get_patient_measurements, save_measurement]

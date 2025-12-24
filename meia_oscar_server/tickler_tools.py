@@ -1,8 +1,7 @@
 """OSCAR Tickler/Task Tools"""
 
-import sys
 from typing import Optional
-from tools import oscar_request
+from tools import oscar_request, handle_response
 
 
 def get_my_ticklers(tool_context, limit: int = 20) -> dict:
@@ -18,9 +17,7 @@ def get_my_ticklers(tool_context, limit: int = 20) -> dict:
     """
     resp = oscar_request("GET", "/ws/services/tickler/mine", tool_context.state.get("session_id"),
                          params={"limit": limit})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[get_my_ticklers] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "get_my_ticklers")
 
 
 def search_ticklers(tool_context, status: Optional[str] = "A", priority: Optional[str] = None,
@@ -51,9 +48,7 @@ def search_ticklers(tool_context, status: Optional[str] = "A", priority: Optiona
 
     resp = oscar_request("POST", "/ws/services/tickler/search", tool_context.state.get("session_id"),
                          params={"startIndex": 0, "limit": 50}, json=data)
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[search_ticklers] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "search_ticklers")
 
 
 def create_tickler(patient_id: int, task_assigned_to: str, service_date: str, message: str, tool_context,
@@ -79,9 +74,7 @@ def create_tickler(patient_id: int, task_assigned_to: str, service_date: str, me
         "status": "A"
     }
     resp = oscar_request("POST", "/ws/services/tickler/add", tool_context.state.get("session_id"), json=data)
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[create_tickler] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "create_tickler")
 
 
 def complete_ticklers(tickler_ids: list, tool_context) -> dict:
@@ -95,9 +88,7 @@ def complete_ticklers(tickler_ids: list, tool_context) -> dict:
     """
     resp = oscar_request("POST", "/ws/services/tickler/complete", tool_context.state.get("session_id"),
                          json={"ticklers": tickler_ids})
-    result = resp.json() if resp.ok else {"error": resp.status_code, "text": resp.text}
-    print(f"[complete_ticklers] {result}", flush=True, file=sys.stderr)
-    return result
+    return handle_response(resp, "complete_ticklers")
 
 
 TICKLER_TOOLS = [get_my_ticklers, search_ticklers, create_tickler, complete_ticklers]

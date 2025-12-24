@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { BACKEND_URL } from "./useAuth"
 
 export type Message = { id?: string; text: string; isUser: boolean; isStatus?: boolean; isStreaming?: boolean }
@@ -8,7 +8,7 @@ export function useEncounterChat(sessionId: string | null) {
   const [messages, setMessages] = useState<Message[]>([])
   const [sending, setSending] = useState(false)
   const [suggestedActions, setSuggestedActions] = useState<string[]>([])
-  const chatSessionId = useMemo(() => `encounter-${crypto.randomUUID()}`, [])
+  const [chatSessionId] = useState(() => `encounter-${crypto.randomUUID()}`)
 
   const addMessage = (msg: Message) => setMessages((m) => [...m, msg])
 

@@ -6,15 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { PaperPlaneTilt, SpinnerGap, Paperclip, X, Copy, Check } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
-
-const stripQuickActions = (text: string) => text.replace(/\[QUICK_ACTIONS:[^\]]*\]/g, '').trim()
-
-const ALLOWED_TYPES = [
-  "image/png", "image/jpeg", "image/gif", "image/webp",
-  "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/html", "text/plain", "text/markdown", "application/msword",
-  "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-]
+import { ALLOWED_TYPES, stripQuickActions } from "@/lib/constants"
 
 export function EncounterPanel() {
   const { sessionId, isLoading } = useAuth()

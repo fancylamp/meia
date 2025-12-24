@@ -19,7 +19,6 @@ import os
 import json
 import logging
 import asyncio
-from typing import Dict
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -37,10 +36,10 @@ CONSUMER_KEY = "ocf56sfzwdd21ma7"
 CONSUMER_SECRET = "3bbcwhshleje74mu"
 
 # Storage
-sessions: Dict[str, Dict] = {}
-pending: Dict[str, Dict] = {}
-user_chat_sessions: Dict[str, list] = {}  # {user_session_id: [chat_session_ids]}
-personalization: Dict[str, Dict] = {}  # {provider_id: {quick_actions: [...], custom_prompt: str}}
+sessions: dict[str, dict] = {}
+pending: dict[str, dict] = {}
+user_chat_sessions: dict[str, list] = {}
+personalization: dict[str, dict] = {}
 tools.init(OSCAR_URL, CONSUMER_KEY, CONSUMER_SECRET, sessions)
 
 app = FastAPI()
