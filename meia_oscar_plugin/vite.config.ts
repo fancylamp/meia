@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { copyFileSync } from "fs"
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
@@ -23,6 +23,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: "./src/test/setup.ts",
+  },
   build: {
     outDir: "dist",
     cssCodeSplit: false,
@@ -36,7 +41,7 @@ export default defineConfig({
       },
     },
   },
-  define: {
+  define: mode === "test" ? {} : {
     "process.env.NODE_ENV": '"production"',
   },
-})
+}))

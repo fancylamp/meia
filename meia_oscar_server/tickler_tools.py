@@ -1,5 +1,6 @@
 """OSCAR Tickler/Task Tools"""
 
+import sys
 from typing import Optional
 from tools import oscar_request
 
