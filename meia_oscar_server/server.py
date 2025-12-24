@@ -1,7 +1,7 @@
 """FastAPI backend with Google ADK Agent for OSCAR integration"""
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Form
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from google.adk import Agent, Runner
 from google.adk.sessions import InMemorySessionService
@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 import tools
 from tools import TOOL_DESCRIPTIONS
 from transcribe import EncounterTranscriber
+from call_handler import CallSession
 
 # Configuration
 OSCAR_URL = "https://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com:8443/oscar"
@@ -35,11 +36,18 @@ BACKEND_URL = "http://localhost:8000"
 CONSUMER_KEY = "ocf56sfzwdd21ma7"
 CONSUMER_SECRET = "3bbcwhshleje74mu"
 
+# Twilio config
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+
 # Storage
 sessions: dict[str, dict] = {}
 pending: dict[str, dict] = {}
 user_chat_sessions: dict[str, list] = {}
 personalization: dict[str, dict] = {}
+clinic_config: dict = {"phone_number": None, "phone_sid": None, "fax_number": None}
+active_calls: dict[str, CallSession] = {}
 tools.init(OSCAR_URL, CONSUMER_KEY, CONSUMER_SECRET, sessions)
 
 app = FastAPI()
@@ -350,6 +358,130 @@ async def recording_websocket(websocket: WebSocket):
                 await transcriber.process_chunk(data["bytes"])
     except WebSocketDisconnect:
         log.info("[WS /recording/] Connection closed")
+
+
+# ============ Contact Hub Endpoints ============
+
+@app.get("/contact-hub")
+async def get_contact_hub(session_id: str):
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    return JSONResponse(clinic_config)
+
+
+@app.post("/contact-hub/enroll")
+async def enroll_contact_hub(request: Request):
+    data = await request.json()
+    session_id = data.get("session_id")
+    
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    if clinic_config["phone_number"]:
+        return JSONResponse(clinic_config)
+    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        return JSONResponse({"error": "Twilio not configured"}, status_code=500)
+    
+    try:
+        from twilio.rest import Client as TwilioClient
+        client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        available = client.available_phone_numbers("CA").local.list(area_code=604, limit=1)
+        if not available:
+            return JSONResponse({"error": "No numbers available"}, status_code=500)
+        
+        number = client.incoming_phone_numbers.create(
+            phone_number=available[0].phone_number,
+            voice_url=f"{BACKEND_PUBLIC_URL}/call/incoming",
+            voice_method="POST"
+        )
+        clinic_config["phone_number"] = number.phone_number
+        clinic_config["phone_sid"] = number.sid
+        log.info(f"[enroll] Provisioned: {number.phone_number}")
+        return JSONResponse(clinic_config)
+    except Exception as e:
+        log.exception(f"[enroll] Error: {e}")
+        return JSONResponse({"error": "Failed to provision phone number"}, status_code=500)
+
+
+@app.delete("/contact-hub/phone")
+async def delete_phone(request: Request):
+    data = await request.json()
+    session_id = data.get("session_id")
+    phone_number = data.get("phone_number")
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    
+    try:
+        from twilio.rest import Client as TwilioClient
+        client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        
+        phone_sid = clinic_config.get("phone_sid")
+        if not phone_sid and phone_number:
+            numbers = client.incoming_phone_numbers.list(phone_number=phone_number)
+            if numbers:
+                phone_sid = numbers[0].sid
+        
+        if not phone_sid:
+            return JSONResponse({"error": "No phone enrolled"}, status_code=400)
+        
+        client.incoming_phone_numbers(phone_sid).delete()
+        log.info(f"[delete_phone] Released: {phone_number or clinic_config['phone_number']}")
+        clinic_config["phone_number"] = None
+        clinic_config["phone_sid"] = None
+        return JSONResponse(clinic_config)
+    except Exception as e:
+        log.exception(f"[delete_phone] Error: {e}")
+        return JSONResponse({"error": "Failed to release phone number"}, status_code=500)
+
+
+@app.post("/call/incoming")
+async def call_incoming(request: Request):
+    """Twilio webhook - returns TwiML to connect media stream"""
+    host = request.headers.get("host", request.url.hostname)
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response><Connect><Stream url="wss://{host}/call/" /></Connect></Response>"""
+    return Response(content=twiml, media_type="application/xml")
+
+
+@app.websocket("/call/")
+async def call_websocket(websocket: WebSocket):
+    """Bidirectional media stream: Twilio <-> Nova Sonic"""
+    await websocket.accept()
+    log.info("[WS /call/] Connected")
+    session: CallSession | None = None
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            event = data.get("event")
+            
+            if event == "start":
+                stream_sid = data["start"]["streamSid"]
+                async def send_audio(payload: str):
+                    await websocket.send_json({
+                        "event": "media",
+                        "streamSid": stream_sid,
+                        "media": {"payload": payload}
+                    })
+                session = CallSession(stream_sid, send_audio)
+                active_calls[stream_sid] = session
+                await session.start()
+                log.info(f"[WS /call/] Started: {stream_sid}")
+                
+            elif event == "media" and session:
+                await session.process_audio(data["media"]["payload"])
+                
+            elif event == "stop":
+                if session:
+                    await session.stop()
+                    active_calls.pop(session.stream_sid, None)
+                log.info("[WS /call/] Stopped")
+                break
+                
+    except WebSocketDisconnect:
+        if session:
+            await session.stop()
+            active_calls.pop(session.stream_sid, None)
+        log.info("[WS /call/] Disconnected")
 
 
 @app.on_event("shutdown")
