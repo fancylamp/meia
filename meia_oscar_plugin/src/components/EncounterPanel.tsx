@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { PaperPlaneTilt, SpinnerGap, Paperclip, X, Copy, Check } from "@phosphor-icons/react"
 import Markdown from "react-markdown"
 
+const stripQuickActions = (text: string) => text.replace(/\[QUICK_ACTIONS:[^\]]*\]/g, '').trim()
+
 const ALLOWED_TYPES = [
   "image/png", "image/jpeg", "image/gif", "image/webp",
   "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -126,7 +128,7 @@ export function EncounterPanel() {
         {messages.map((m, i) => (
           <div key={i} className={`${m.isUser ? "flex justify-end" : ""} group`}>
             <div className={`max-w-[80%] rounded-lg px-3 text-sm break-words overflow-hidden ${m.isUser ? "bg-primary text-primary-foreground py-2" : m.isStatus ? "text-muted-foreground/60 italic font-light py-0.5" : "bg-muted py-2 prose prose-sm dark:prose-invert"}`}>
-              {m.isUser || m.isStatus ? m.text : <Markdown>{m.text}</Markdown>}
+              {m.isUser || m.isStatus ? m.text : <Markdown>{stripQuickActions(m.text)}</Markdown>}
             </div>
             {!m.isUser && !m.isStatus && (
               <button onClick={() => copyToClipboard(m.text, i)} className="mt-1 p-1 opacity-0 group-hover:opacity-100 hover:bg-accent rounded transition-opacity flex items-center gap-1 text-xs text-muted-foreground">

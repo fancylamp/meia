@@ -228,4 +228,18 @@ describe('EncounterPanel', () => {
 
     expect(sendMessageFn).not.toHaveBeenCalled()
   })
+
+  it('hides QUICK_ACTIONS metadata from rendered messages', () => {
+    mockUseAuth.mockReturnValue({ sessionId: 'test-session', isLoading: false })
+    mockUseEncounterChat.mockReturnValue({
+      ...defaultChatMock,
+      messages: [
+        { text: 'Here is your response [QUICK_ACTIONS: "Action 1", "Action 2"]', isUser: false },
+      ],
+    })
+
+    render(<EncounterPanel />)
+    expect(screen.getByText('Here is your response')).toBeInTheDocument()
+    expect(screen.queryByText(/QUICK_ACTIONS/)).not.toBeInTheDocument()
+  })
 })
