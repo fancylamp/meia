@@ -9,7 +9,7 @@ def get_daily_appointments(date: str, tool_context, provider_no: Optional[str] =
 
     Args:
         date: Date in YYYY-MM-DD format, or "today" for current date
-        provider_no: Provider ID to filter by, or "me" for current user (optional - omit for all providers)
+        provider_no: Provider ID to filter by (use get_current_provider to get your ID, or omit for all providers)
 
     Returns:
         dict with array of appointments, each containing:

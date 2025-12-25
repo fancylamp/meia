@@ -9,9 +9,9 @@ def search_patients(query: str, tool_context) -> dict:
 
     Args:
         query: Search term - can be:
-            - Patient name (partial match, e.g., "Smith" or "John S")
-            - Chart number
-            - Health insurance number (HIN)
+            - Patient name in "LastName,FirstName" or "LastName" format (e.g., "Smith,John" or "Smith")
+            - Chart number (prefix with "chartNo:" e.g., "chartNo:12345")
+            - Address (prefix with "addr:" e.g., "addr:123 Main St")
 
     Returns:
         dict with content array of matching patients, each containing:

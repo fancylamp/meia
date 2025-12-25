@@ -394,10 +394,17 @@ async def enroll_contact_hub(request: Request):
             voice_url=f"{BACKEND_PUBLIC_URL}/call/incoming",
             voice_method="POST"
         )
-        clinic_config = {"phone_number": number.phone_number, "phone_sid": number.sid}
+        # Save phone number and OAuth tokens for phone system
+        session_data = sessions[session_id]
+        clinic_config = {
+            "phone_number": number.phone_number,
+            "phone_sid": number.sid,
+            "service_token": session_data.get("access_token"),
+            "service_token_secret": session_data.get("access_token_secret"),
+        }
         store.save_clinic_config(clinic_config)
         log.info(f"[enroll] Provisioned: {number.phone_number}")
-        return JSONResponse(clinic_config)
+        return JSONResponse({"phone_number": number.phone_number, "phone_sid": number.sid})
     except Exception as e:
         log.exception(f"[enroll] Error: {e}")
         return JSONResponse({"error": "Failed to provision phone number"}, status_code=500)
@@ -457,13 +464,16 @@ async def call_websocket(websocket: WebSocket):
             
             if event == "start":
                 stream_sid = data["start"]["streamSid"]
+                call_sid = data["start"]["callSid"]
                 async def send_audio(payload: str):
                     await websocket.send_json({
                         "event": "media",
                         "streamSid": stream_sid,
                         "media": {"payload": payload}
                     })
-                session = CallSession(stream_sid, send_audio)
+                async def clear_audio():
+                    await websocket.send_json({"event": "clear", "streamSid": stream_sid})
+                session = CallSession(stream_sid, call_sid, send_audio, clear_audio)
                 active_calls[stream_sid] = session
                 await session.start()
                 log.info(f"[WS /call/] Started: {stream_sid}")

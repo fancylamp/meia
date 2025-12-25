@@ -30,6 +30,7 @@ export S3_BUCKET=meia-chat-your_clinic_id  # Optional, defaults to meia-chat-{CL
 export TWILIO_ACCOUNT_SID=your_account_sid
 export TWILIO_AUTH_TOKEN=your_auth_token
 export BACKEND_PUBLIC_URL=https://your-public-url.com  # Twilio webhook URL
+export STAFF_PHONE=+16045551234  # Phone number for call transfers to staff
 ```
 
 ## Data Storage
