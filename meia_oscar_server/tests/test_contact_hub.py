@@ -20,7 +20,7 @@ class TestGetContactHub:
 
     def test_success(self, client):
         with patch("server.sessions", {"test": {}}), \
-             patch("server.clinic_config", {"phone_number": "+15551234567", "fax_number": None}):
+             patch("store.get_clinic_config", return_value={"phone_number": "+15551234567", "fax_number": None}):
             response = client.get("/contact-hub?session_id=test")
             assert response.status_code == 200
             assert response.json()["phone_number"] == "+15551234567"
@@ -34,14 +34,14 @@ class TestEnrollContactHub:
 
     def test_already_enrolled(self, client):
         with patch("server.sessions", {"test": {}}), \
-             patch("server.clinic_config", {"phone_number": "+15551234567", "phone_sid": "PN123"}):
+             patch("store.get_clinic_config", return_value={"phone_number": "+15551234567", "phone_sid": "PN123"}):
             response = client.post("/contact-hub/enroll", json={"session_id": "test"})
             assert response.status_code == 200
             assert response.json()["phone_number"] == "+15551234567"
 
     def test_twilio_not_configured(self, client):
         with patch("server.sessions", {"test": {}}), \
-             patch("server.clinic_config", {"phone_number": None}), \
+             patch("store.get_clinic_config", return_value={}), \
              patch("server.TWILIO_ACCOUNT_SID", None):
             response = client.post("/contact-hub/enroll", json={"session_id": "test"})
             assert response.status_code == 500
@@ -58,7 +58,7 @@ class TestDeletePhone:
         mock_twilio = MagicMock()
         mock_twilio.incoming_phone_numbers.list.return_value = []
         with patch("server.sessions", {"test": {}}), \
-             patch("server.clinic_config", {"phone_number": None, "phone_sid": None}), \
+             patch("store.get_clinic_config", return_value={}), \
              patch("twilio.rest.Client", return_value=mock_twilio):
             response = client.request("DELETE", "/contact-hub/phone", json={"session_id": "test"})
             assert response.status_code == 400

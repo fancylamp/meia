@@ -28,25 +28,23 @@ import tools
 from tools import TOOL_DESCRIPTIONS
 from transcribe import EncounterTranscriber
 from call_handler import CallSession
+import store
 
-# Configuration
-OSCAR_URL = "https://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com:8443/oscar"
-BEDROCK_MODEL = "arn:aws:bedrock:ca-central-1:063347417131:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-BACKEND_URL = "http://localhost:8000"
-CONSUMER_KEY = "ocf56sfzwdd21ma7"
-CONSUMER_SECRET = "3bbcwhshleje74mu"
+# Configuration from env vars
+OSCAR_URL = os.getenv("OSCAR_URL", "https://ec2-16-52-150-143.ca-central-1.compute.amazonaws.com:8443/oscar")
+BEDROCK_MODEL = os.getenv("BEDROCK_MODEL", "arn:aws:bedrock:ca-central-1:063347417131:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+CONSUMER_KEY = os.getenv("OSCAR_CONSUMER_KEY", "ocf56sfzwdd21ma7")
+CONSUMER_SECRET = os.getenv("OSCAR_CONSUMER_SECRET", "3bbcwhshleje74mu")
 
 # Twilio config
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 
-# Storage
+# In-memory storage (ephemeral)
 sessions: dict[str, dict] = {}
 pending: dict[str, dict] = {}
-user_chat_sessions: dict[str, list] = {}
-personalization: dict[str, dict] = {}
-clinic_config: dict = {"phone_number": None, "phone_sid": None, "fax_number": None}
 active_calls: dict[str, CallSession] = {}
 tools.init(OSCAR_URL, CONSUMER_KEY, CONSUMER_SECRET, sessions)
 
@@ -180,13 +178,14 @@ async def auth_status(session_id: str):
 async def create_chat_session(request: Request):
     data = await request.json()
     session_id = data.get("session_id")
-    log.info(f"[POST /chat-sessions] session={session_id[:8] if session_id else None}...")
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    provider_id = sessions[session_id].get("provider_id")
+    if not provider_id:
+        return JSONResponse({"error": "Provider ID not found"}, status_code=400)
     chat_id = str(uuid.uuid4())
     await session_service.create_session(app_name="oscar_app", user_id=session_id, session_id=chat_id, state={"session_id": session_id})
-    user_chat_sessions.setdefault(session_id, []).append(chat_id)
-    log.info(f"[POST /chat-sessions] Created chat {chat_id}")
+    store.add_chat_session(provider_id, chat_id)
     return JSONResponse({"id": chat_id})
 
 
@@ -194,50 +193,43 @@ async def create_chat_session(request: Request):
 async def list_chat_sessions(session_id: str):
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    return JSONResponse({"sessions": user_chat_sessions.get(session_id, [])})
+    provider_id = sessions[session_id].get("provider_id")
+    if not provider_id:
+        return JSONResponse({"error": "Provider ID not found"}, status_code=400)
+    return JSONResponse({"sessions": store.get_chat_sessions(provider_id)})
 
 
 @app.get("/chat-sessions/{chat_id}/messages")
 async def get_chat_messages(chat_id: str, session_id: str):
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    session = await session_service.get_session(app_name="oscar_app", user_id=session_id, session_id=chat_id)
-    if not session:
-        return JSONResponse({"messages": []})
-    messages = []
-    for event in session.events:
-        if event.content and event.content.parts:
-            for part in event.content.parts:
-                if hasattr(part, 'text') and part.text:
-                    messages.append({"text": part.text, "isUser": event.content.role == "user"})
-    return JSONResponse({"messages": messages})
+    provider_id = sessions[session_id].get("provider_id")
+    if not provider_id:
+        return JSONResponse({"error": "Provider ID not found"}, status_code=400)
+    return JSONResponse({"messages": store.get_chat_history(provider_id, chat_id)})
 
 
 @app.delete("/chat-sessions/{chat_id}")
 async def delete_chat_session(chat_id: str, session_id: str):
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    if session_id in user_chat_sessions:
-        user_chat_sessions[session_id] = [c for c in user_chat_sessions[session_id] if c != chat_id]
+    provider_id = sessions[session_id].get("provider_id")
+    if provider_id:
+        store.remove_chat_session(provider_id, chat_id)
+        store.delete_chat_history(provider_id, chat_id)
     return JSONResponse({"success": True})
 
 
 # ============ Personalization Endpoints ============
 
 @app.get("/personalization")
-async def get_personalization(session_id: str):
+async def get_personalization_endpoint(session_id: str):
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     provider_id = sessions[session_id].get("provider_id")
     if not provider_id:
-        log.warning(f"[GET /personalization] No provider_id for session {session_id[:8]}...")
         return JSONResponse({"error": "Provider ID not found"}, status_code=400)
-    defaults = {
-        "quick_actions": [{"text": "What are your capabilities?", "enabled": True}, {"text": "Create a new patient", "enabled": True}],
-        "encounter_quick_actions": [{"text": "Generate a note for this encounter", "enabled": True}],
-        "custom_prompt": ""
-    }
-    return JSONResponse({**defaults, **personalization.get(provider_id, {})})
+    return JSONResponse(store.get_personalization(provider_id))
 
 
 @app.put("/personalization")
@@ -248,13 +240,12 @@ async def update_personalization(request: Request):
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     provider_id = sessions[session_id].get("provider_id")
     if not provider_id:
-        log.warning(f"[PUT /personalization] No provider_id for session {session_id[:8]}...")
         return JSONResponse({"error": "Provider ID not found"}, status_code=400)
-    personalization[provider_id] = {
+    store.save_personalization(provider_id, {
         "quick_actions": data.get("quick_actions", []),
         "encounter_quick_actions": data.get("encounter_quick_actions", []),
         "custom_prompt": data.get("custom_prompt", "")
-    }
+    })
     return JSONResponse({"success": True})
 
 
@@ -282,7 +273,7 @@ async def chat(request: Request):
     
     # Get custom prompt for this user
     provider_id = sessions[session_id].get("provider_id")
-    custom_prompt = personalization.get(provider_id, {}).get("custom_prompt", "") if provider_id else ""
+    custom_prompt = store.get_personalization(provider_id).get("custom_prompt", "") if provider_id else ""
     agent = get_agent(custom_prompt)
     agent_runner = Runner(agent=agent, app_name="oscar_app", session_service=session_service)
     
@@ -303,6 +294,11 @@ async def chat(request: Request):
         content = types.Content(role="user", parts=parts)
         run_config = RunConfig(streaming_mode=StreamingMode.SSE)
         streamed_text = ""
+        
+        # Save user message to history
+        if provider_id and message:
+            store.append_chat_message(provider_id, chat_session_id, {"text": message, "isUser": True})
+        
         try:
             async for event in agent_runner.run_async(user_id=session_id, session_id=chat_session_id, new_message=content, run_config=run_config):
                 if not event.content or not event.content.parts:
@@ -319,6 +315,9 @@ async def chat(request: Request):
                             match = re.search(r'\[QUICK_ACTIONS:\s*(.+?)\]', part.text)
                             if match:
                                 suggested_actions = [a.strip().strip('"') for a in match.group(1).split(',')]
+                            # Save assistant response to history
+                            if provider_id and streamed_text:
+                                store.append_chat_message(provider_id, chat_session_id, {"text": streamed_text, "isUser": False})
                             yield f"data: {json.dumps({'type': 'response', 'suggested_actions': suggested_actions})}\n\n"
                         else:
                             chunk = re.sub(r'\[QUICK_ACTIONS:[^\]]+\]', '', part.text)
@@ -366,7 +365,7 @@ async def recording_websocket(websocket: WebSocket):
 async def get_contact_hub(session_id: str):
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    return JSONResponse(clinic_config)
+    return JSONResponse(store.get_clinic_config())
 
 
 @app.post("/contact-hub/enroll")
@@ -376,7 +375,9 @@ async def enroll_contact_hub(request: Request):
     
     if session_id not in sessions:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    if clinic_config["phone_number"]:
+    
+    clinic_config = store.get_clinic_config()
+    if clinic_config.get("phone_number"):
         return JSONResponse(clinic_config)
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
         return JSONResponse({"error": "Twilio not configured"}, status_code=500)
@@ -393,8 +394,8 @@ async def enroll_contact_hub(request: Request):
             voice_url=f"{BACKEND_PUBLIC_URL}/call/incoming",
             voice_method="POST"
         )
-        clinic_config["phone_number"] = number.phone_number
-        clinic_config["phone_sid"] = number.sid
+        clinic_config = {"phone_number": number.phone_number, "phone_sid": number.sid}
+        store.save_clinic_config(clinic_config)
         log.info(f"[enroll] Provisioned: {number.phone_number}")
         return JSONResponse(clinic_config)
     except Exception as e:
@@ -414,6 +415,7 @@ async def delete_phone(request: Request):
         from twilio.rest import Client as TwilioClient
         client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         
+        clinic_config = store.get_clinic_config()
         phone_sid = clinic_config.get("phone_sid")
         if not phone_sid and phone_number:
             numbers = client.incoming_phone_numbers.list(phone_number=phone_number)
@@ -424,10 +426,9 @@ async def delete_phone(request: Request):
             return JSONResponse({"error": "No phone enrolled"}, status_code=400)
         
         client.incoming_phone_numbers(phone_sid).delete()
-        log.info(f"[delete_phone] Released: {phone_number or clinic_config['phone_number']}")
-        clinic_config["phone_number"] = None
-        clinic_config["phone_sid"] = None
-        return JSONResponse(clinic_config)
+        log.info(f"[delete_phone] Released: {phone_number or clinic_config.get('phone_number')}")
+        store.save_clinic_config({})
+        return JSONResponse({})
     except Exception as e:
         log.exception(f"[delete_phone] Error: {e}")
         return JSONResponse({"error": "Failed to release phone number"}, status_code=500)

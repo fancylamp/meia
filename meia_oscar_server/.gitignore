@@ -13,3 +13,6 @@ wheels/
 node_modules/
 package.json
 package-lock.json
+
+# Environment
+.env

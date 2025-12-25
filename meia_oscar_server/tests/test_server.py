@@ -65,7 +65,7 @@ class TestPersonalization:
 
     def test_get_personalization_success(self, client):
         with patch("server.sessions", {"test": {"provider_id": "999"}}), \
-             patch("server.personalization", {}):
+             patch("store.get_personalization", return_value={"quick_actions": [], "custom_prompt": ""}):
             response = client.get("/personalization?session_id=test")
             assert response.status_code == 200
             data = response.json()
