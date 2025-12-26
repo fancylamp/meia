@@ -44,6 +44,8 @@ export function useEncounterChat(sessionId: string | null) {
                 accumulatedText = ""
               }
               addMessage({ text: event.description, isUser: false, isStatus: true })
+            } else if (event.type === "tool_result" && event.name === "save_note") {
+              (window as any).reloadOscar?.()
             } else if (event.type === "text_chunk" && event.text) {
               if (!streamingMsgId) streamingMsgId = crypto.randomUUID()
               accumulatedText += event.text

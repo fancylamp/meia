@@ -4,23 +4,19 @@ import { ProviderPanel } from "./components/ProviderPanel"
 import { EncounterPanel } from "./components/EncounterPanel"
 import "./index.css"
 
-document.documentElement.style.visibility = 'hidden';
-
-// Block OSCAR auto-refresh, then init extension
-let stopDone = false;
-window.addEventListener('load', () => {
-  const tags = document.querySelectorAll('meta[http-equiv="refresh"]');
-  if (tags.length > 0) {
-    tags.forEach(el => el.remove());
-    window.stop();
+// Only run in top frame, not inside our iframe
+if (window.self === window.top) {
+  // Block Oscar auto-refresh immediately
+  document.querySelectorAll('meta[http-equiv="refresh"]').forEach(el => el.remove());
+  
+  if (document.body) {
+    initExtension();
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('meta[http-equiv="refresh"]').forEach(el => el.remove());
+      initExtension();
+    });
   }
-  stopDone = true;
-  tryInit();
-}, { once: true });
-
-function tryInit() {
-  if (!stopDone || !document.body) return;
-  initExtension();
 }
 
 async function initExtension() {
@@ -28,43 +24,39 @@ async function initExtension() {
   const isProvider = path.startsWith("/oscar/provider");
   const isEncounter = path.startsWith("/oscar/casemgmt/");
 
-  if (window.location.port === "8443" && (isProvider || isEncounter)) {
-    const result = await chrome.storage.local.get("meia_session_id");
-    
-    // Don't render encounter panel if not authenticated
-    if (isEncounter && !result.meia_session_id) {
-      document.documentElement.style.visibility = '';
-      return;
-    }
+  if (window.location.port !== "8443" || (!isProvider && !isEncounter)) return;
 
-    // Resize encounter window to full screen on startup
-    if (isEncounter) {
-      window.resizeTo(screen.availWidth, screen.availHeight);
-      window.moveTo(0, 0);
-    }
+  const result = await chrome.storage.local.get("meia_session_id");
+  if (isEncounter && !result.meia_session_id) return;
 
-    const container = document.createElement("div");
-    container.id = "meia-root";
-    document.body.appendChild(container);
-    document.body.style.marginRight = "25vw";
-
-    ReactDOM.createRoot(container).render(
-      <React.StrictMode>
-        {isEncounter ? <EncounterPanel /> : <ProviderPanel />}
-      </React.StrictMode>
-    );
+  // Resize encounter window to full screen
+  if (isEncounter) {
+    window.resizeTo(screen.availWidth, screen.availHeight);
+    window.moveTo(0, 0);
   }
-  document.documentElement.style.visibility = '';
-}
 
-if (document.body) {
-  tryInit();
-} else {
-  const observer = new MutationObserver((_mutations, obs) => {
-    if (document.body) {
-      obs.disconnect();
-      tryInit();
-    }
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  // Create iframe with current page content
+  const iframe = document.createElement("iframe");
+  iframe.id = "oscar-frame";
+  iframe.src = window.location.href;
+  iframe.style.cssText = "position:fixed;top:0;left:0;width:75vw;height:100vh;border:none;";
+
+  // Create plugin container
+  const container = document.createElement("div");
+  container.id = "meia-root";
+
+  // Replace page content
+  document.body.innerHTML = "";
+  document.body.style.margin = "0";
+  document.body.appendChild(iframe);
+  document.body.appendChild(container);
+
+  // Expose reload function globally
+  (window as any).reloadOscar = () => iframe.contentWindow?.location.reload();
+
+  ReactDOM.createRoot(container).render(
+    <React.StrictMode>
+      {isEncounter ? <EncounterPanel /> : <ProviderPanel />}
+    </React.StrictMode>
+  );
 }

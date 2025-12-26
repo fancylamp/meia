@@ -4,11 +4,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Item, ItemGroup, ItemContent, ItemTitle, ItemActions } from "@/components/ui/item"
 import { Checkbox } from "@/components/ui/checkbox"
-import { X, Plus, Check } from "@phosphor-icons/react"
+import { X, Plus, Check, SpinnerGapIcon } from "@phosphor-icons/react"
 
 type QuickAction = { text: string; enabled: boolean }
 
 interface PersonalizationViewProps {
+  loading: boolean
   quickActions: QuickAction[]
   encounterQuickActions: QuickAction[]
   customPrompt: string
@@ -20,13 +21,17 @@ interface PersonalizationViewProps {
 }
 
 export function PersonalizationView({
-  quickActions, encounterQuickActions, customPrompt, hasUnsavedPrompt,
+  loading, quickActions, encounterQuickActions, customPrompt, hasUnsavedPrompt,
   setQuickActions, setEncounterQuickActions, setCustomPrompt, savePersonalization
 }: PersonalizationViewProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState("")
   const [encounterEditingIndex, setEncounterEditingIndex] = useState<number | null>(null)
   const [encounterEditText, setEncounterEditText] = useState("")
+
+  if (loading) {
+    return <div className="flex-1 flex items-center justify-center"><SpinnerGapIcon size={24} className="animate-spin" /></div>
+  }
 
   return (
     <div className="p-4 space-y-4 overflow-y-auto flex-1">

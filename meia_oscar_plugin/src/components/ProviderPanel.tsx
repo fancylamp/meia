@@ -12,28 +12,40 @@ import { ContactHubView } from "./provider/ContactHubView"
 type Attachment = { name: string; type: string; data: string }
 type View = "chat" | "notifications" | "personalization" | "contacthub" | "settings"
 
+const RELOAD_TOOLS = ['create_appointment', 'update_appointment_status', 'delete_appointment']
+
 export function ProviderPanel() {
   const { sessionId, isAuthenticated, isLoading, error, login, logout } = useAuth()
   const { tabs, activeTabId, messages, sending, loading, suggestedActions, createTab, deleteTab, switchTab, addMessageToTab, setTabSending, setSuggestedActions } = useChatSessions(sessionId, isAuthenticated)
   const [view, setView] = useState<View>("chat")
-  const [quickActions, setQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "What are your capabilities?", enabled: true }, { text: "Create a new patient", enabled: true }])
-  const [encounterQuickActions, setEncounterQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "Generate a note for this encounter", enabled: true }])
+  const [personalizationLoading, setPersonalizationLoading] = useState(true)
+  const [quickActions, setQuickActions] = useState<{text: string, enabled: boolean}[]>([])
+  const [encounterQuickActions, setEncounterQuickActions] = useState<{text: string, enabled: boolean}[]>([])
   const [customPrompt, setCustomPrompt] = useState("")
   const [hasUnsavedPrompt, setHasUnsavedPrompt] = useState(false)
 
+  const DEFAULT_QUICK_ACTIONS = [{ text: "What are your capabilities?", enabled: true }, { text: "Create a new patient", enabled: true }]
+  const DEFAULT_ENCOUNTER_ACTIONS = [{ text: "Generate a note for this encounter", enabled: true }]
+
   useEffect(() => {
     if (!sessionId || !isAuthenticated) return
+    setPersonalizationLoading(true)
     fetch(`${BACKEND_URL}/personalization?session_id=${sessionId}`)
       .then(r => r.json())
       .then(data => {
-        if (data.quick_actions) setQuickActions(data.quick_actions)
-        if (data.encounter_quick_actions) setEncounterQuickActions(data.encounter_quick_actions)
-        if (data.custom_prompt !== undefined) {
-          setCustomPrompt(data.custom_prompt)
-          setHasUnsavedPrompt(false)
+        const qa = data.quick_actions?.length ? data.quick_actions : DEFAULT_QUICK_ACTIONS
+        const eqa = data.encounter_quick_actions?.length ? data.encounter_quick_actions : DEFAULT_ENCOUNTER_ACTIONS
+        const prompt = data.custom_prompt ?? ""
+        setQuickActions(qa)
+        setEncounterQuickActions(eqa)
+        setCustomPrompt(prompt)
+        setHasUnsavedPrompt(false)
+        if (!data.quick_actions?.length || !data.encounter_quick_actions?.length) {
+          savePersonalization(qa, eqa, prompt)
         }
       })
       .catch(console.error)
+      .finally(() => setPersonalizationLoading(false))
   }, [sessionId, isAuthenticated])
 
   const savePersonalization = (actions: typeof quickActions, encounterActions: typeof encounterQuickActions, prompt: string) => {
@@ -79,6 +91,8 @@ export function ProviderPanel() {
                 accumulatedText = ""
               }
               addMessageToTab(targetTabId, { text: event.description, isUser: false, isStatus: true })
+            } else if (event.type === "tool_result" && RELOAD_TOOLS.includes(event.name)) {
+              (window as any).reloadOscar?.()
             } else if (event.type === "text_chunk" && event.text) {
               if (!streamingMsgId) streamingMsgId = crypto.randomUUID()
               accumulatedText += event.text
@@ -159,6 +173,7 @@ export function ProviderPanel() {
           <NotificationsView />
         ) : view === "personalization" ? (
           <PersonalizationView
+            loading={personalizationLoading}
             quickActions={quickActions}
             encounterQuickActions={encounterQuickActions}
             customPrompt={customPrompt}
