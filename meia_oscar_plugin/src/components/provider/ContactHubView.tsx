@@ -119,9 +119,9 @@ export function ContactHubView({ sessionId }: ContactHubViewProps) {
         </CardContent>
       </Card>
       <Card size="sm">
-        <CardHeader><CardTitle className="font-semibold">Instructions</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="font-semibold">Phone Agent Instructions</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-xs text-muted-foreground">Custom instructions for the Contact Hub AI assistant.</p>
+          <p className="text-xs text-muted-foreground">Custom instructions for the Contact Hub AI phone agent.</p>
           <Textarea
             value={instructions}
             onChange={(e) => { setInstructions(e.target.value); setHasUnsavedInstructions(true) }}
