@@ -6,17 +6,12 @@ import "./index.css"
 
 // Only run in top frame, not inside our iframe
 if (window.self === window.top) {
-  // Block Oscar auto-refresh immediately
-  document.querySelectorAll('meta[http-equiv="refresh"]').forEach(el => el.remove());
-  
-  if (document.body) {
+  // Block Oscar auto-refresh on load
+  window.addEventListener('load', () => {
+    document.querySelectorAll('meta[http-equiv="refresh"]').forEach(el => el.remove());
+    window.stop();
     initExtension();
-  } else {
-    document.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('meta[http-equiv="refresh"]').forEach(el => el.remove());
-      initExtension();
-    });
-  }
+  }, { once: true });
 }
 
 async function initExtension() {
