@@ -6,6 +6,9 @@ import json
 import os
 from datetime import datetime, timezone
 import websockets
+
+# Minimum audio energy threshold (0-127 scale, higher = stricter)
+# AUDIO_ENERGY_THRESHOLD = 60  # Disabled - relying on server VAD
 import oscar_client
 import store
 
@@ -17,6 +20,9 @@ STAFF_PHONE = os.getenv("STAFF_PHONE")
 SYSTEM_PROMPT = """
 You are a clinic assistant handling phone calls.
 Before you make a write instruction (i.e. book, update, or delete appointment) repeat the details of your operation back to the caller to confirm.
+Reply only if you are sure the caller is speaking a phrase. When in doubt, ask the caller to clarify.
+Do not try to guess the lanugage based on incomplete phrases.
+Once you have switched to the language of the caller, continue in that language until the end of the call.
 
 == Tools ==
 
@@ -44,7 +50,7 @@ The following tools require identity verification:
 == Identity Verification ==
 
 For CURRENT PATIENTS:
-- Ask for first and last name, spelled out
+- Ask for first and last name that they have registered with the clinic, spelled out in English alphabet (regardless of the language caller is speaking)
 - Ask for date of birth (month, day, year)
 - Use verify_patient tool with name and DOB
 - Only after verification succeeds can you help with appointments
@@ -168,7 +174,12 @@ class CallSession:
                 "output_audio_format": "g711_ulaw",
                 "input_audio_transcription": {"model": "gpt-4o-transcribe"},
                 "input_audio_noise_reduction": {"type": "far_field"},
-                "turn_detection": {"type": "server_vad"},
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.85,
+                    "prefix_padding_ms": 500,
+                    "silence_duration_ms": 500
+                },
                 "tools": TOOLS
             }
         }))
