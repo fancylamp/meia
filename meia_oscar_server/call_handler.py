@@ -15,8 +15,7 @@ STAFF_PHONE = os.getenv("STAFF_PHONE")
 
 SYSTEM_PROMPT = """
 You are a clinic assistant handling phone calls.
-Start by greeting the caller and asking how you can help. Mention you can speak multiple languages.
-Before you make a write instruction (i.e. book, update, or delete appointment) repeat what you hear back to the caller to confirm.
+Before you make a write instruction (i.e. book, update, or delete appointment) repeat the details of your operation back to the caller to confirm.
 
 == Tools ==
 
@@ -158,16 +157,18 @@ class CallSession:
             "session": {
                 "modalities": ["text", "audio"],
                 "instructions": SYSTEM_PROMPT,
-                "voice": "shimmer",
+                "voice": "marin",
                 "input_audio_format": "g711_ulaw",
                 "output_audio_format": "g711_ulaw",
-                "input_audio_transcription": {"model": "whisper-1"},
+                "input_audio_transcription": {"model": "gpt-4o-transcribe"},
+                "input_audio_noise_reduction": {"type": "far_field"},
                 "turn_detection": {"type": "server_vad"},
                 "tools": TOOLS
             }
         }))
 
         self.response_task = asyncio.create_task(self._process_responses())
+        await self.ws.send(json.dumps({"type": "response.create"}))
 
     async def _process_responses(self):
         try:
@@ -212,7 +213,8 @@ class CallSession:
             return self._verify_patient(args.get("name", ""), args.get("date_of_birth", ""), args.get("phone"))
         
         if tool_name == "transfer_to_staff":
-            return self._transfer_to_staff()
+            asyncio.create_task(self._transfer_to_staff())
+            return {"success": True, "message": "Transferring call to staff."}
         
         if tool_name == "end_call":
             return self._end_call()
@@ -245,18 +247,18 @@ class CallSession:
         
         return {"error": f"Unknown tool: {tool_name}"}
 
-    def _transfer_to_staff(self) -> dict:
+    async def _transfer_to_staff(self):
+        await asyncio.sleep(3)
         if not STAFF_PHONE or not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
-            return {"error": "Call transfer not available."}
+            return
         try:
             from twilio.rest import Client
             client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
             client.calls(self.call_sid).update(
-                twiml=f'<Response><Say>Transferring you now.</Say><Dial>{STAFF_PHONE}</Dial></Response>'
+                twiml=f'<Response><Dial>{STAFF_PHONE}</Dial></Response>'
             )
-            return {"success": True, "message": "Transferring call to staff."}
         except Exception as e:
-            return {"error": f"Transfer failed: {e}"}
+            print(f"[CallSession] Transfer failed: {e}")
 
     def _end_call(self) -> dict:
         if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:

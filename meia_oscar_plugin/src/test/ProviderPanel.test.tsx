@@ -150,7 +150,7 @@ describe('ProviderPanel', () => {
 
     render(<ProviderPanel />)
     const navButtons = document.querySelectorAll('.w-12 button')
-    fireEvent.click(navButtons[2]) // Settings button
+    fireEvent.click(navButtons[4]) // Settings button (index 4 now)
     expect(screen.getByText('Settings')).toBeInTheDocument()
     expect(screen.getByText('Disconnect')).toBeInTheDocument()
   })
@@ -180,7 +180,7 @@ describe('ProviderPanel', () => {
 
     render(<ProviderPanel />)
     const navButtons = document.querySelectorAll('.w-12 button')
-    fireEvent.click(navButtons[1]) // Personalization button (User icon)
+    fireEvent.click(navButtons[2]) // Personalization button (index 2 now)
     expect(screen.getByText('Personalization')).toBeInTheDocument()
     expect(screen.getByText('Quick actions')).toBeInTheDocument()
   })
@@ -202,7 +202,7 @@ describe('ProviderPanel', () => {
 
     render(<ProviderPanel />)
     const navButtons = document.querySelectorAll('.w-12 button')
-    fireEvent.click(navButtons[1])
+    fireEvent.click(navButtons[2]) // Personalization button
     
     expect(screen.getByText('Provider view')).toBeInTheDocument()
     expect(screen.getByText('Encounter view')).toBeInTheDocument()
@@ -227,7 +227,7 @@ describe('ProviderPanel', () => {
 
     render(<ProviderPanel />)
     const navButtons = document.querySelectorAll('.w-12 button')
-    fireEvent.click(navButtons[1])
+    fireEvent.click(navButtons[2]) // Personalization button
     
     expect(screen.getByText('Custom prompts')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Enter custom instructions...')).toBeInTheDocument()

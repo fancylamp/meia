@@ -2,17 +2,20 @@ import { useState, useEffect } from "react"
 import { useAuth, BACKEND_URL } from "@/hooks/useAuth"
 import { useChatSessions } from "@/hooks/useChatSessions"
 import { Button } from "@/components/ui/button"
-import { ChatCircle, Gear, SpinnerGapIcon, User } from "@phosphor-icons/react"
+import { ChatCircle, Gear, SpinnerGapIcon, User, Bell, Phone } from "@phosphor-icons/react"
 import { ChatView } from "./provider/ChatView"
 import { SettingsView } from "./provider/SettingsView"
 import { PersonalizationView } from "./provider/PersonalizationView"
+import { NotificationsView } from "./provider/NotificationsView"
+import { ContactHubView } from "./provider/ContactHubView"
 
 type Attachment = { name: string; type: string; data: string }
+type View = "chat" | "notifications" | "personalization" | "contacthub" | "settings"
 
 export function ProviderPanel() {
   const { sessionId, isAuthenticated, isLoading, error, login, logout } = useAuth()
   const { tabs, activeTabId, messages, sending, loading, suggestedActions, createTab, deleteTab, switchTab, addMessageToTab, setTabSending, setSuggestedActions } = useChatSessions(sessionId, isAuthenticated)
-  const [view, setView] = useState<"chat" | "settings" | "personalization">("chat")
+  const [view, setView] = useState<View>("chat")
   const [quickActions, setQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "What are your capabilities?", enabled: true }, { text: "Create a new patient", enabled: true }])
   const [encounterQuickActions, setEncounterQuickActions] = useState<{text: string, enabled: boolean}[]>([{ text: "Generate a note for this encounter", enabled: true }])
   const [customPrompt, setCustomPrompt] = useState("")
@@ -121,12 +124,20 @@ export function ProviderPanel() {
     )
   }
 
+  const viewTitles: Record<View, string> = {
+    chat: "Chat",
+    notifications: "Notifications",
+    personalization: "Personalization",
+    contacthub: "Contact Hub",
+    settings: "Settings"
+  }
+
   return (
     <div className="fixed top-0 right-0 w-[25vw] h-screen bg-background border-l flex">
       <div className="flex-1 flex flex-col min-h-0">
         <div className="p-3 border-b font-semibold flex items-center gap-2">
           <img src={chrome.runtime.getURL("icon.png")} alt="" className="w-5 h-5" />
-          {view === "chat" ? "Chat" : view === "settings" ? "Settings" : "Personalization"}
+          {viewTitles[view]}
         </div>
         {view === "chat" ? (
           <ChatView
@@ -144,9 +155,9 @@ export function ProviderPanel() {
             setSuggestedActions={setSuggestedActions}
             sendToChat={sendToChat}
           />
-        ) : view === "settings" ? (
-          <SettingsView sessionId={sessionId} logout={logout} />
-        ) : (
+        ) : view === "notifications" ? (
+          <NotificationsView />
+        ) : view === "personalization" ? (
           <PersonalizationView
             quickActions={quickActions}
             encounterQuickActions={encounterQuickActions}
@@ -157,14 +168,24 @@ export function ProviderPanel() {
             setCustomPrompt={handleCustomPromptChange}
             savePersonalization={savePersonalization}
           />
+        ) : view === "contacthub" ? (
+          <ContactHubView sessionId={sessionId} />
+        ) : (
+          <SettingsView sessionId={sessionId} logout={logout} />
         )}
       </div>
       <div className="w-12 border-l flex flex-col">
         <button onClick={() => setView("chat")} className={`h-12 flex items-center justify-center ${view === "chat" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
           <ChatCircle size={20} />
         </button>
+        <button onClick={() => setView("notifications")} className={`h-12 flex items-center justify-center ${view === "notifications" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+          <Bell size={20} />
+        </button>
         <button onClick={() => setView("personalization")} className={`h-12 flex items-center justify-center ${view === "personalization" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
           <User size={20} />
+        </button>
+        <button onClick={() => setView("contacthub")} className={`h-12 flex items-center justify-center ${view === "contacthub" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+          <Phone size={20} />
         </button>
         <button onClick={() => setView("settings")} className={`h-12 flex items-center justify-center ${view === "settings" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
           <Gear size={20} />
