@@ -151,14 +151,26 @@ def delete_chat_history(provider_no: str, chat_id: str):
 
 # ============ Clinic Config ============
 
+DEFAULT_INSTRUCTIONS = '''Greet the caller with:
+"Hello, I am a clinic administration assistant powered by artificial intelligence. How can I help you today?
+I can also speak in multiple languages if you'd like so feel free to use the language you are most comfortable in". Use English as the default.
+'''
+
+
 def get_clinic_config() -> dict:
-    """Get clinic config (phone, fax)"""
+    """Get clinic config (phone, fax, instructions). Initializes default if not exists."""
     _ensure_resources()
     try:
         resp = table.get_item(Key={"provider_no": "_clinic_config"})
-        return resp.get("Item", {}).get("config", {})
+        item = resp.get("Item")
+        if not item or "instructions" not in item.get("config", {}):
+            config = item.get("config", {}) if item else {}
+            config["instructions"] = DEFAULT_INSTRUCTIONS
+            save_clinic_config(config)
+            return config
+        return item["config"]
     except Exception:
-        return {}
+        return {"instructions": DEFAULT_INSTRUCTIONS}
 
 
 def save_clinic_config(config: dict):

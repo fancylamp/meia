@@ -29,8 +29,11 @@ export S3_BUCKET=meia-chat-your_clinic_id  # Optional, defaults to meia-chat-{CL
 # Twilio (for Contact Hub phone system)
 export TWILIO_ACCOUNT_SID=your_account_sid
 export TWILIO_AUTH_TOKEN=your_auth_token
-export BACKEND_PUBLIC_URL=https://your-public-url.com  # Twilio webhook URL
+export BACKEND_PUBLIC_URL=https://your-public-url.com  # Webhook URL for Twilio
 export STAFF_PHONE=+16045551234  # Phone number for call transfers to staff
+
+# OpenAI (for Contact Hub voice agent)
+export OPENAI_API_KEY=your_openai_api_key
 ```
 
 ## Data Storage

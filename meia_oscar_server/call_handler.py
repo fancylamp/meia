@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timezone
 import websockets
 import oscar_client
+import store
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -152,11 +153,16 @@ class CallSession:
         self.ws = await websockets.connect(url, additional_headers=headers)
         self.is_active = True
 
+        # Get custom instructions from clinic config
+        clinic_config = store.get_clinic_config()
+        custom_instructions = clinic_config.get("instructions", "")
+        full_prompt = f"== Clinic Instructions ==\n{custom_instructions}\n\n{SYSTEM_PROMPT}" if custom_instructions else SYSTEM_PROMPT
+
         await self.ws.send(json.dumps({
             "type": "session.update",
             "session": {
                 "modalities": ["text", "audio"],
-                "instructions": SYSTEM_PROMPT,
+                "instructions": full_prompt,
                 "voice": "marin",
                 "input_audio_format": "g711_ulaw",
                 "output_audio_format": "g711_ulaw",

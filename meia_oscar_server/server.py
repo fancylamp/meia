@@ -410,6 +410,19 @@ async def enroll_contact_hub(request: Request):
         return JSONResponse({"error": "Failed to provision phone number"}, status_code=500)
 
 
+@app.put("/contact-hub/instructions")
+async def update_contact_hub_instructions(request: Request):
+    data = await request.json()
+    session_id = data.get("session_id")
+    if session_id not in sessions:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    
+    clinic_config = store.get_clinic_config()
+    clinic_config["instructions"] = data.get("instructions", "")
+    store.save_clinic_config(clinic_config)
+    return JSONResponse({"success": True})
+
+
 @app.delete("/contact-hub/phone")
 async def delete_phone(request: Request):
     data = await request.json()
